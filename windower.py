@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 File: windower.py
 Authors: Johan Sääskilahti, Atte Rajavaara, Minna Repo, Topias Hämäläinen
