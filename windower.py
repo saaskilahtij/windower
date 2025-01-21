@@ -8,7 +8,6 @@ Description: This tool was designed to create windows from preprocessed JSON dat
 import argparse
 import sys
 
-
 DESC = r"""
      _     _     _   O             ___        __     _     _     _   ____
      \    | \    |  /|\  __    _  | ___\    /    \    \    | \    |  |   \
@@ -34,10 +33,10 @@ def handle_args():
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbosity',
                         default=False)
+    parser.add_argument('-f', '--file', type=str, help='Path to the JSON file',
+                        required=True)
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
 if __name__ == '__main__':
-
-    handle_args()
-    print("Hello windower")
+    args = handle_args()
