@@ -38,5 +38,8 @@ def handle_args():
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
-if __name__ == '__main__':
+def main():
     args = handle_args()
+
+if __name__ == '__main__':
+    main()
