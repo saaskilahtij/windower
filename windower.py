@@ -39,7 +39,11 @@ def handle_args():
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
 def main():
+    """
+        The entrypoint
+    """
     args = handle_args()
+    print(args)
 
 if __name__ == '__main__':
     main()
