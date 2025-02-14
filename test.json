@@ -1,0 +1,73 @@
+{
+  "person": {
+    "name": "John Doe",
+    "age": 30,
+    "isEmployed": true,
+    "address": {
+      "street": "123 Main St",
+      "city": "Anytown",
+      "country": "USA",
+      "postalCode": "12345"
+    },
+    "phoneNumbers": [
+      {
+        "type": "home",
+        "number": "555-1234"
+      },
+      {
+        "type": "work",
+        "number": "555-5678"
+      }
+    ],
+    "email": "john.doe@example.com",
+    "interests": ["reading", "hiking", "photography"],
+    "education": [
+      {
+        "degree": "Bachelor's",
+        "major": "Computer Science",
+        "university": "State University",
+        "year": 2015
+      },
+      {
+        "degree": "Master's",
+        "major": "Data Science",
+        "university": "Tech Institute",
+        "year": 2017
+      }
+    ],
+    "salary": 75000.50,
+    "isMarried": false,
+    "children": null
+  },
+  "company": {
+    "name": "Tech Innovations Inc.",
+    "founded": 2005,
+    "employees": 250,
+    "departments": ["Engineering", "Marketing", "HR", "Finance"],
+    "locations": [
+      {
+        "city": "San Francisco",
+        "state": "CA"
+      },
+      {
+        "city": "New York",
+        "state": "NY"
+      }
+    ]
+  },
+  "products": [
+    {
+      "id": "P001",
+      "name": "Smartphone",
+      "price": 699.99,
+      "inStock": true
+    },
+    {
+      "id": "P002",
+      "name": "Laptop",
+      "price": 1299.99,
+      "inStock": false
+    }
+  ]
+}
+

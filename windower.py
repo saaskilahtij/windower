@@ -6,6 +6,8 @@ Description: This tool was designed to create windows from preprocessed JSON dat
 """
 
 import argparse
+import orjson
+import datetime
 import sys
 
 DESC = r"""
@@ -43,7 +45,18 @@ def main():
         The entrypoint
     """
     args = handle_args()
-    print(args)
+    
+    if args.file:
+        try:
+            with open(args.file, 'r') as file:
+                data = orjson.loads(file.read())
+        except FileNotFoundError:
+            raise Exception(f"File {args.file} not found")
+
+        print(data)
+        if args.verbose:
+            print(f"Loaded {args.file} successfully")
+
 
 if __name__ == '__main__':
     main()
