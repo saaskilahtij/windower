@@ -8,4 +8,3 @@ def test_handle_args():
     """
     with pytest.raises(SystemExit):  #Expect the program to exit due to an error
         windower.handle_args()  #The function will raise an error
-   
