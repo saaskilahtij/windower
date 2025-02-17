@@ -7,7 +7,7 @@ Description: This tool was designed to create windows from preprocessed JSON dat
 
 import sys
 import argparse
-import orjson
+import sys
 
 DESC = r"""
      _     _     _   O             ___        __     _     _     _   ____
@@ -18,6 +18,66 @@ DESC = r"""
          \|     \|   |   |    \|  |___/      \__/         \|     \|  |     \
                          windows made quick and easy
 """
+
+def json_to_csv(json_data):
+    """
+    This function converts json to csv format with pandas library
+    """
+    csv_filename = input("Enter name for csv file: ")
+    if not csv_filename.lower().endswith("csv"):
+        csv_filename += ".csv"
+
+    df = pd.DataFrame(json_data)
+    df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
+
+    print(f"Json converted to csv and saved in {csv_filename} file")
+
+def load_ecu_names(data):
+    """
+    Extract ECU names from JSON data.
+
+    Args:
+        data : List of dictionaries containing ECU information.
+
+    Returns:
+        list: A list of ECU names found in the data.
+    """
+    ecu_names = set()
+
+    for row in data:
+        name = row.get("name")  # Extract name field
+        if name and name != "Unknown":  # Ignore "Unknown" names
+            ecu_names.add(name)
+
+    return list(ecu_names)
+
+
+def read_file(file_name):
+    """ 
+    This function reads a JSON file and converts it into a Python object using orjson.
+    
+    Args:
+        file_name (str): Path to the JSON file.
+    
+    Returns:
+        dict or list: Parsed JSON data as a Python object.
+    
+    Note:
+        - The file must be a valid JSON.
+        - orjson is used instead of the built-in json module due to its 
+          performance benefits, especially for large files.
+    """
+    try:
+        with open(file_name, "r") as file:
+            return orjson.loads(file.read())
+    except FileNotFoundError:
+        print(f"Error: The file '{file_name}' was not found.")
+    except ValueError:
+        print(f"Error: Failed to parse JSON from '{file_name}'. The file may be malformed or not valid JSON.")
+
+    
+    return None
+    
 
 def handle_args():
     """
@@ -43,26 +103,7 @@ def main():
         The entrypoint
     """
     args = handle_args()
-    data = {}
-
-    if args.file:
-        try:
-            with open(args.file, 'r', encoding='UTF-8') as file:
-                # pylint: disable-no-member
-                data = orjson.loads(file.read())
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(f"File {args.file} not found") from exc
-        except ValueError as exc:
-            raise ValueError(f"Malformed JSON while reading {args.file}") from exc
-
-    if args.output:
-        try:
-            with open(args.output, 'w', encoding='UTF-8') as f:
-                f.write(orjson.dumps(data).decode('UTF-8'))
-        except FileNotFoundError as exc:
-            raise FileNotFoundError(f"File {args.output} not found") from exc
-        except ValueError as exc:
-            raise ValueError(f"Malformed JSON while writing to {args.output}") from exc
+    print(args)
 
 if __name__ == '__main__':
     main()
