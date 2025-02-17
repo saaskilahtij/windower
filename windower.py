@@ -5,11 +5,9 @@ Authors: Johan Sääskilahti, Atte Rajavaara, Minna Repo, Topias Hämäläinen
 Description: This tool was designed to create windows from preprocessed JSON data
 """
 
+import sys
 import argparse
 import sys
-import orjson
-import pandas as pd
-
 
 DESC = r"""
      _     _     _   O             ___        __     _     _     _   ____
@@ -94,10 +92,9 @@ def handle_args():
     """
     parser = argparse.ArgumentParser(description=DESC, prog='windower.py',
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbosity',
-                        default=False)
     parser.add_argument('-f', '--file', type=str, help='Path to the JSON file',
                         required=True)
+    parser.add_argument('-o', '--output', type=str, help='Output file name')
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
@@ -107,12 +104,6 @@ def main():
     """
     args = handle_args()
     print(args)
-    print('loading...')
-    data = read_file(args.file)
-    # print(data)
-    ecus = load_ecu_names(data)
-    print(ecus)
-    json_to_csv(data)
 
 if __name__ == '__main__':
     main()
