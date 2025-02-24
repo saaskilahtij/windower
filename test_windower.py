@@ -3,9 +3,11 @@ File: test_windower.py
 Authors: Johan Sääskilahti, Atte Rajavaara, Minna Repo, Topias Hämäläinen
 Description: This file contains the windower unit tests
 """
+
 import unittest
+import logging
 from unittest.mock import patch, mock_open
-from windower import handle_args, main
+from windower import handle_args, main,log_setup
 
 class TestWindower(unittest.TestCase):
 
@@ -22,6 +24,23 @@ class TestWindower(unittest.TestCase):
         for call in mock_file().write.call_args_list:
             written_content += call[0][0]
         self.assertIn('"test":"value"', written_content)
-
+        
+class TestLogger(unittest.TestCase):        
+    def test_logsetup(self):
+        """
+        Fast and simple test for logger setup and messages (can be improved)
+        Windower.log should have all 4 messages and console only error-> messages
+        """
+        
+        log_setup()
+        logger = logging.getLogger()
+        
+        self.assertEqual(len(logger.handlers), 2)
+        
+        logging.debug("Debug message for testing")
+        logging.info("Info message for testing")
+        logging.error("Error message for testing")
+        logging.critical("Critical message for testing")
+                
 if __name__ == "__main__":
     unittest.main()
