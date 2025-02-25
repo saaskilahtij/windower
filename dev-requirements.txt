@@ -1,3 +1,4 @@
 pytest
 orjson
 pylint
+pandas
