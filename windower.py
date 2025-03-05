@@ -158,15 +158,5 @@ def main():
         window_count += 1 
     print(windows)
     
-
-    """if args.output_csv and args.length:
-        if data:
-            windows = create_windows(data, 9)
-            json_to_csv(windows, args.output_csv)
-        return
-    else: 
-        logging.error("Please provide both output file name and window length")
-        return"""
-
 if __name__ == '__main__':
     main()
