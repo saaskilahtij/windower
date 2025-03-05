@@ -142,7 +142,7 @@ def main():
     windows = []
     num_list = [0,1,2,3,4,5,6,7,8,9]
 
-    # Täytyy jotenkin selvittää montako numeroa loppuun jää, josta ei saada ikkunaa    
+    # Täytyy jotenkin selvittää montako numeroa loppuun jää, josta ei saada ikkunaa
     start_index = 0
     length = 3
     end_index = length - 1
@@ -155,8 +155,8 @@ def main():
             windows[window_count].append(num_list[start_index])
             start_index += 1
         end_index += length
-        window_count += 1 
+        window_count += 1
     print(windows)
-    
+ 
 if __name__ == '__main__':
     main()

@@ -5,7 +5,6 @@ Description: This file contains the windower unit tests
 """
 
 import unittest
-import logging
 from unittest.mock import patch, mock_open, MagicMock
 import sys
 from windower import handle_args, main, log_setup
@@ -24,4 +23,3 @@ class TestWindower(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
