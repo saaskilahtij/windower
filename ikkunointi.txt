@@ -1,0 +1,40 @@
+Ikkunointialgoritmin idea on luoda ikkunoita Unix timestamppien avulla
+{"name": "Unknown", "timestamp": 1717671043.0755155, "id": 63, "data": "4702007e000c", "raw": "0x4702007e000c"}
+Eli -> "timestamp": 1717671043.0755155
+
+Ikkunointialgoritmista lisää: https://medium.com/@megha_bh/mastering-the-sliding-window-technique-a-visual-guide-with-mind-map-751cebf936e0
+
+Tässä tapauksessa käyttäjä antaa sekuntimääräisen ikkunan koon esimerkiksi *-t* mukaan.
+
+Eli jos ikkunan koko on 10 sekuntia, niin datasta luodaan ikkunoita, joiden timestampit osuu tähän 10 sekuntin alueelle
+    { "name": "Brake", "id": 1, "timestamp": 1696161600 },
+    { "name": "ECU2", "id": 2, "timestamp": 1696161602 },
+    { "name": "Unknown", "id": 3, "timestamp": 1696161604 },
+    { "name": "ECU3", "id": 4, "timestamp": 1696161608 },
+Tässä voidaan nähdä kuinka timestampit päättyy sekunteihin 00, 02, 04, 08, jotka osuu kaikki ikkunan alueelle.
+Tästä rakennettaisiin siis ensimmäinen ikkuna.
+
+Kun ikkuna on luotu, siirrytään seuraavan ikkunaan.
+
+Karkeasti indekseillä, jos ikkunan koko olisi *2* listalle list = [0,1,2,3,4,5,6,7,8,9]
+
+start_index = 0
+end_index = ikkunan_pituus
+while end_index < len(list):
+    while start_index =< end_index:
+        lisää_ikkunaan3(list[start_index])
+        alku++
+    loppu += loppu
+
+                                                 
+    0,  1,  2,   3,   4,   5,   6,   7,  8,  9
+    10  12  17   28   34   35   39   59  60  90
+
+pituus = 10
+
+list[0]['timestamp'] = 10
+list[?]['timestamp']
+
+mitkä indexit kuuluu pituuden välille
+for i in rage(list):
+    if list[i]['timstamp'] - list[0]['timestamp'] <= pituus_sekunteina

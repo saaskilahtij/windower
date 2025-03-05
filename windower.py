@@ -131,9 +131,7 @@ def main():
     """
     log_setup()
     args = handle_args()
-    print("Read file")
     data = read_file(args.file)
-    print("Data read")
 
     if args.ecu_names:
         if data:
@@ -141,14 +139,34 @@ def main():
             print(f"ECU names found in the data: {', '.join(ecu_names)}")
         return
 
-    if args.output_csv and args.length:
+    windows = []
+    num_list = [0,1,2,3,4,5,6,7,8,9]
+
+    # Täytyy jotenkin selvittää montako numeroa loppuun jää, josta ei saada ikkunaa    
+    start_index = 0
+    length = 3
+    end_index = length - 1
+    window_count = 0
+    while end_index <= len(num_list):
+        windows.append([])
+        # Luo ehto jos:
+        # if rest_of_the_elements % window_length != 0
+        while start_index <= end_index:
+            windows[window_count].append(num_list[start_index])
+            start_index += 1
+        end_index += length
+        window_count += 1 
+    print(windows)
+    
+
+    """if args.output_csv and args.length:
         if data:
             windows = create_windows(data, 9)
             json_to_csv(windows, args.output_csv)
         return
     else: 
         logging.error("Please provide both output file name and window length")
-        return
+        return"""
 
 if __name__ == '__main__':
     main()
