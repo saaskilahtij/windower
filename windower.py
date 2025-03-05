@@ -23,20 +23,15 @@ DESC = r"""
                          windows made quick and easy
 """
 
-def json_to_csv(json_data):
+def json_to_csv(json_data, csv_filename):
     """
     This function converts json to csv format with pandas library
     """
-    csv_filename = input("Enter name for csv file: ")
-    if not csv_filename.lower().endswith("csv"):
-        csv_filename += ".csv"
-
     df = pd.DataFrame(json_data)
     df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
+    logging.info(f"Saved to {csv_filename}")
 
-    print(f"Json converted to csv and saved in {csv_filename} file")
-
-def load_ecu_names(data):
+def parse_ecu_names(data):
     """
     Extract ECU names from JSON data.
 
@@ -49,23 +44,21 @@ def load_ecu_names(data):
     ecu_names = set()
 
     for row in data:
+        # This hardcoded "name" field might run in to problems if JSON schema changes
+        # Let's ask about this
         name = row.get("name")  # Extract name field
         if name and name != "Unknown":  # Ignore "Unknown" names
             ecu_names.add(name)
 
     return list(ecu_names)
 
-
 def read_file(file_name):
     """ 
     This function reads a JSON file and converts it into a Python object using orjson.
-    
     Args:
         file_name (str): Path to the JSON file.
-    
     Returns:
         dict or list: Parsed JSON data as a Python object.
-    
     Note:
         - The file must be a valid JSON.
         - orjson is used instead of the built-in json module due to its 
@@ -76,8 +69,8 @@ def read_file(file_name):
             return orjson.loads(file.read())
     except FileNotFoundError:
         logging.error(f"Error: The file '{file_name}' was not found.")
-    except ValueError:
-        logging.error(f"Error: Failed to parse JSON from '{file_name}'. The file may be malformed or not valid JSON.")
+    except ValueError as e:
+        logging.error(e)
 
     
     return None
@@ -86,7 +79,6 @@ def read_file(file_name):
 def handle_args():
     """
     This function parses the arguments
-
     Returns:
         Parsed args
     Note:
@@ -98,7 +90,9 @@ def handle_args():
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-f', '--file', type=str, help='Path to the JSON file',
                         required=True)
-    parser.add_argument('-o', '--output', type=str, help='Output file name')
+    parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
+    parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
+    parser.add_argument('-l', '--length', type=int, help='Window length in seconds')
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
@@ -132,14 +126,71 @@ def log_setup():
     if not logger.hasHandlers():
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
+
+def create_windows(events, window_length):
+    """
+    Create windows from events based on the window length.
+    
+    Args:
+        events (list): List of event dictionaries.
+        window_length (int): Length of the window in seconds.
+    
+    Returns:
+        list: List of windows, each window is a list of events.
+    """
+    # Sort the events by timestamp
+    # This might be unnecessary if the events are already sorted
+    # This can also be optimized if sorting is needed and this is slow
+    sorted_events = sorted(events, key=lambda x: x['timestamp'])
+    length = len(sorted_events)
+    windows = []
+
+    # This accesses a list out of range on the internal loop
+    # TODO fix it
+    start_index = 0
+    while start_index < length:
+        
+        start_time = sorted_events[start_index]['timestamp']
+        
+        end_time = start_time + window_length
+        
+        current_window = []
+        
+        end_index = start_index
+        
+        while sorted_events[end_index]['timestamp'] <= end_time:
+            current_window.append(sorted_events[end_index])
+            end_index += 1
+        
+        windows.append(current_window)
+        start_index = end_index
+
+    return windows
     
 def main():
     """
-        The entrypoint
+        Entrypoint
     """
     log_setup()
     args = handle_args()
-    print(args)
+    print("Read file")
+    data = read_file(args.file)
+    print("Data read")
+
+    if args.ecu_names:
+        if data:
+            ecu_names = parse_ecu_names(data)
+            print(f"ECU names found in the data: {', '.join(ecu_names)}")
+        return
+
+    if args.output_csv and args.length:
+        if data:
+            windows = create_windows(data, 9)
+            json_to_csv(windows, args.output_csv)
+        return
+    else: 
+        logging.error("Please provide both output file name and window length")
+        return
 
 if __name__ == '__main__':
     main()
