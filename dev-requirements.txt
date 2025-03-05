@@ -2,3 +2,4 @@ pytest
 orjson
 pylint
 pandas
+perftester

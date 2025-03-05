@@ -140,7 +140,9 @@ def main():
             ecu_names = parse_ecu_names(data)
             print(f"ECU names found in the data: {', '.join(ecu_names)}")
         return
-
+    """
+    Pois käytöstä
+    
     if args.output_csv and args.length:
         if data:
             windows = create_windows(data, 9)
@@ -149,6 +151,7 @@ def main():
     else: 
         logging.error("Please provide both output file name and window length")
         return
-
+    """
+    
 if __name__ == '__main__':
     main()
