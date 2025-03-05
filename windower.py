@@ -65,16 +65,13 @@ def read_file(file_name):
           performance benefits, especially for large files.
     """
     try:
-        with open(file_name, "r") as file:
+        with open(file_name, "r", encoding="utf-8") as file:
             return orjson.loads(file.read())
     except FileNotFoundError:
         logging.error(f"Error: The file '{file_name}' was not found.")
     except ValueError as e:
         logging.error(e)
-
-    
     return None
-    
 
 def handle_args():
     """
@@ -104,69 +101,30 @@ def log_setup():
     
     Console logging for real-time feedback (if needed)
     
-    """   
+    """
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
-    
-    #Format of logs and date 
+
+    #Format of logs and date
     log_format = "%(asctime)s - %(levelname)s - %(message)s"
     date_format = "%d.%m.%Y %H:%M:%S"
-    
-    #Create handler for file logging with rotation, makes new file when closing maxBytes and keeps one backup, set level of messages to log
+
+    #Create handler for file logging with rotation,
+    # makes new file when closing maxBytes and keeps one backup, set level of messages to log
     file_handler = RotatingFileHandler("Windower.log", maxBytes = 1024*1024, backupCount = 1)
     file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
     file_handler.setLevel(logging.DEBUG)
-    
+
     #Handler for console logging, set level of messages to log
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
     console_handler.setLevel(logging.ERROR)
-    
+
     #Add both handlers if logger is empty (no handlers added already)
     if not logger.hasHandlers():
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
-def create_windows(events, window_length):
-    """
-    Create windows from events based on the window length.
-    
-    Args:
-        events (list): List of event dictionaries.
-        window_length (int): Length of the window in seconds.
-    
-    Returns:
-        list: List of windows, each window is a list of events.
-    """
-    # Sort the events by timestamp
-    # This might be unnecessary if the events are already sorted
-    # This can also be optimized if sorting is needed and this is slow
-    sorted_events = sorted(events, key=lambda x: x['timestamp'])
-    length = len(sorted_events)
-    windows = []
-
-    # This accesses a list out of range on the internal loop
-    # TODO fix it
-    start_index = 0
-    while start_index < length:
-        
-        start_time = sorted_events[start_index]['timestamp']
-        
-        end_time = start_time + window_length
-        
-        current_window = []
-        
-        end_index = start_index
-        
-        while sorted_events[end_index]['timestamp'] <= end_time:
-            current_window.append(sorted_events[end_index])
-            end_index += 1
-        
-        windows.append(current_window)
-        start_index = end_index
-
-    return windows
-    
 def main():
     """
         Entrypoint
