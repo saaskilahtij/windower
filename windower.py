@@ -110,7 +110,7 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
     parser.add_argument('-json', '--output-json', action='store_true', help='Output as JSON')
     parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
-    parser.add_argument('-l', '--length', type=int, help='Window length in seconds')
+    parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
