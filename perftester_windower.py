@@ -36,7 +36,8 @@ if __name__ == "__main__":
     def perftester_json_to_csv():
         """Tests the performance and memory usage of windower.json_to_csv()"""
         json_data = windower.read_file(TEST_FILE)  # Read JSON file
-        return windower.json_to_csv(json_data)  # Convert to CSV
+        csv_filename = "output.csv"  # Specify the output CSV file name
+        return windower.json_to_csv(json_data, csv_filename)  # Convert to CSV
 
     # Run performance test for the read_file fuction
     # You can change arguments Number and Repeat
