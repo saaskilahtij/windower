@@ -147,7 +147,11 @@ def log_setup():
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
-def create_windows(data: List[Dict], window_length: int, ecu_name: str = None) -> Dict[int, Dict[int, Dict]]:
+def create_windows(
+        data: List[Dict],
+        window_length: int,
+        ecu_name: str = None
+    ) -> Dict[int, Dict[int, Dict]]:
     """
     Creates time-based windows from sorted data based on the given window length.
     
