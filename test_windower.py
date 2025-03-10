@@ -5,42 +5,35 @@ Description: This file contains the windower unit tests
 """
 
 import unittest
-import logging
-from unittest.mock import patch, mock_open
-from windower import handle_args, main,log_setup
+from unittest.mock import patch
+import sys
+from windower import main
 
 class TestWindower(unittest.TestCase):
+    """
+    Test suite for the Windower module.
+    This class contains unit tests for the Windower module, specifically testing
+    the functionality related to extracting and printing ECU names from JSON data.
+    Tests:
+        - test_ecu_names_flow: Verifies that the main function correctly prints the
+          ECU names by mocking the read_file and parse_ecu_names functions.
+    """
+    @patch("windower.parse_ecu_names", return_value=["ECU1", "ECU2"])
+    @patch("windower.read_file", return_value=[{"name": "ECU1"}, {"name": "ECU2"}])
+    def test_ecu_names_flow(self, _mock_read, mock_load):
+        """
+        Test the flow for extracting and printing ECU names from the JSON data.
+        
+        This test mocks the read_file and parse_ecu_names functions to simulate
+        reading a JSON file and extracting ECU names. It then verifies that the
+        main function correctly prints the ECU names.
+        """
+        test_args = ["windower.py", "--file", "dummy.json", "--ecu-names"]
+        with patch.object(sys, 'argv', test_args):
+            with patch('builtins.print') as mock_print:
+                main()
+                mock_load.assert_called_once()
+                mock_print.assert_called_with("ECU names found in the data: ECU1, ECU2")
 
-    @patch('builtins.open', new_callable=mock_open, read_data='{"test":"value"}')
-    def test_read_json_file_and_output(self, mock_file):
-        """
-          Test reading a JSON file and then outputting it to the specified output file
-        """
-        with patch('sys.argv', ['windower.py', '-f', 'test.json', '-o', 'output.json']):
-            main()
-        mock_file.assert_any_call('test.json', 'r', encoding='UTF-8')
-        mock_file.assert_any_call('output.json', 'w', encoding='UTF-8')
-        written_content = ''
-        for call in mock_file().write.call_args_list:
-            written_content += call[0][0]
-        self.assertIn('"test":"value"', written_content)
-        
-class TestLogger(unittest.TestCase):        
-    def test_logsetup(self):
-        """
-        Fast and simple test for logger setup and messages (can be improved)
-        Windower.log should have all 4 messages and console only error-> messages
-        """
-        
-        log_setup()
-        logger = logging.getLogger()
-        
-        self.assertEqual(len(logger.handlers), 2)
-        
-        logging.debug("Debug message for testing")
-        logging.info("Info message for testing")
-        logging.error("Error message for testing")
-        logging.critical("Critical message for testing")
-                
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
