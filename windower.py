@@ -28,7 +28,7 @@ DESC = r"""
 def json_to_csv(json_data: dict, csv_filename: str):
     """
     This function converts a 2D dictionary to CSV format using the pandas library.
-    
+
     Args:
         json_data (dict): The 2D dictionary to convert.
         csv_filename (str): The name of the output CSV file.
@@ -50,8 +50,7 @@ def json_to_csv(json_data: dict, csv_filename: str):
     # Save the DataFrame to a CSV file
     df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
     # Logger does not work in this function, so print is used as a workaround
-    print(f"Saved to {csv_filename}")
-    #logging.info(f"Saved to {csv_filename}")
+    logging.info("Saved to %s", csv_filename)
 
 def parse_ecu_names(data: dict):
     """
@@ -73,7 +72,7 @@ def parse_ecu_names(data: dict):
     return list(ecu_names)
 
 def read_file(file_name: str):
-    """ 
+    """
     This function reads a JSON file and converts it into a Python object using orjson.
     Args:
         file_name (str): Path to the JSON file.
@@ -81,7 +80,7 @@ def read_file(file_name: str):
         dict or list: Parsed JSON data as a Python object.
     Note:
         - The file must be a valid JSON.
-        - orjson is used instead of the built-in json module due to its 
+        - orjson is used instead of the built-in json module due to its
           performance benefits, especially for large files.
     """
     try:
@@ -112,17 +111,20 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
     parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
+    parser.add_argument('-loglvl', '--log-level', type=lambda s: s.upper(),
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                        default='INFO', help='Set logging level, default: INFO')
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
-def log_setup():
+def log_setup(log_level: str):
     """
-    Setup for logger. Handlers for both file and console logging. 
-    
+    Setup for logger. Handlers for both file and console logging.
+
     File logging uses rotation so file won't get too big and it keeps one backup.
-    
+
     Console logging for real-time feedback (if needed)
-    
+
     """
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -132,15 +134,15 @@ def log_setup():
     date_format = "%d.%m.%Y %H:%M:%S"
 
     #Create handler for file logging with rotation,
-    # makes new file when closing maxBytes and keeps one backup, set level of messages to log
+    # makes new file when closing maxBytes and keeps one backup, file always logs everything in code
     file_handler = RotatingFileHandler("Windower.log", maxBytes = 1024*1024, backupCount = 1)
     file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
     file_handler.setLevel(logging.DEBUG)
 
-    #Handler for console logging, set level of messages to log
+    #Handler for console logging, user set level for console logging
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-    console_handler.setLevel(logging.ERROR)
+    console_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
 
     #Add both handlers if logger is empty (no handlers added already)
     if not logger.hasHandlers():
@@ -154,7 +156,7 @@ def create_windows(
     ) -> Dict[int, Dict[int, Dict]]:
     """
     Creates time-based windows from sorted data based on the given window length.
-    
+
     :param data: A list of dictionaries containing timestamped data.
     :param window_length: Length of each window in seconds.
     :return: A 2D dictionary where windows[window_index][entry_index] contains data entries.
@@ -194,8 +196,12 @@ def main():
     """
         Entrypoint
     """
-    log_setup()
+
     args = handle_args()
+    log_setup(args.log_level)
+
+    logging.info("Logging level set to %s", args.log_level.upper())
+
     data = read_file(args.file)
 
     if args.ecu_names:
