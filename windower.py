@@ -110,6 +110,7 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
     parser.add_argument('-json', '--output-json', action='store_true', help='Output as JSON')
     parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
+    parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
@@ -146,7 +147,11 @@ def log_setup():
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
-def create_windows(data: List[Dict], window_length: int) -> Dict[int, Dict[int, Dict]]:
+def create_windows(
+        data: List[Dict],
+        window_length: int,
+        ecu_name: str = None
+    ) -> Dict[int, Dict[int, Dict]]:
     """
     Creates time-based windows from sorted data based on the given window length.
     
@@ -168,6 +173,8 @@ def create_windows(data: List[Dict], window_length: int) -> Dict[int, Dict[int, 
     entry_index = 0  # Track the index within a window
 
     for entry in data:
+        if ecu_name and entry.get("name").lower() != ecu_name.lower():
+            continue
         current_time = entry['timestamp']
 
         # Check if the current entry still belongs to the current window
@@ -199,7 +206,7 @@ def main():
 
     # If the length argument is provided, create windows
     if args.length:
-        windows = create_windows(data, args.length)
+        windows = create_windows(data, args.length, args.ecu)
         if args.output_json:
             # pylint: disable=fixme
             # TODO: Dump data to JSON
