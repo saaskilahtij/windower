@@ -111,6 +111,9 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
     parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
+    parser.add_argument('-s', '--step', type=float, default=None,
+                    help='How many seconds the window moves forward '
+                    '(default: same as window length)')
     parser.add_argument('-loglvl', '--log-level', type=lambda s: s.upper(),
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help='Set logging level, default: INFO')
@@ -152,6 +155,7 @@ def log_setup(log_level: str):
 def create_windows(
         data: List[Dict],
         window_length: int,
+        step: int = None,
         ecu_name: str = None
     ) -> Dict[int, Dict[int, Dict]]:
     """
@@ -159,6 +163,8 @@ def create_windows(
 
     :param data: A list of dictionaries containing timestamped data.
     :param window_length: Length of each window in seconds.
+    :param step: How many seconds the window moves forward (default: same as window length).
+    :param ecu_name: Filter data by specific ECU name.
     :return: A 2D dictionary where windows[window_index][entry_index] contains data entries.
     """
     if not data:
@@ -168,27 +174,48 @@ def create_windows(
     # defaultdict makes sure that missing keys do not raise errors
     windows = defaultdict(dict)
 
-    # Determine the starting timestamp for the first window
-    start_time = data[0]['timestamp']
+    # Determine the starting and ending timestamps
+    min_time = data[0]['timestamp']
+    max_time = data[-1]['timestamp']
+
+    if step is None:
+        step = window_length
+
+    if step <= 0:
+        logging.error("Step size must be greater than zero.")
+        return {}
 
     window_index = 0  # Track the current window index
     entry_index = 0  # Track the index within a window
+    start_time = min_time # Set the start time to the minimum timestamp
+    data_index = 0 # Marks the start of each new window, avoiding revisiting data from the start.
 
-    for entry in data:
-        if ecu_name and entry.get("name").lower() != ecu_name.lower():
-            continue
-        current_time = entry['timestamp']
+    while start_time <= max_time:
+        # Reset entry index for each window
+        entry_index = 0
 
-        # Check if the current entry still belongs to the current window
-        if current_time - start_time >= window_length:
-            # Move to the next window
-            start_time += window_length * ((current_time - start_time) // window_length)
-            window_index += 1
-            entry_index = 0
+        # Move data_index to the start of the current window
+        while data_index < len(data) and data[data_index]['timestamp'] < start_time:
+            data_index += 1
 
-        # Assign the entry to the current window
-        windows[window_index][entry_index] = entry
-        entry_index += 1
+        # Iterate only through entries belonging to the current window
+        i = data_index
+        while i < len(data) and data[i]['timestamp'] < (start_time + window_length):
+            entry = data[i]
+
+            # If filtering by ECU name, skip other ECUs
+            if ecu_name and entry.get("name", "").lower() != ecu_name.lower():
+                i += 1
+                continue
+
+            # Assign the entry to the current window
+            windows[window_index][entry_index] = entry
+            entry_index += 1
+            i += 1
+
+        # Move to the next window by step size
+        start_time += step
+        window_index += 1
 
     return dict(windows)
 
@@ -212,7 +239,11 @@ def main():
 
     # If the length argument is provided, create windows
     if args.length:
-        windows = create_windows(data, args.length, args.ecu)
+        windows = create_windows(data, args.length, args.step, args.ecu)
+
+        if not windows:
+            logging.error("No windows created. Exiting.")
+            return
         if args.output_json:
             # pylint: disable=fixme
             # TODO: Dump data to JSON
