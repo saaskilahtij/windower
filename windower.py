@@ -10,7 +10,6 @@ import argparse
 import logging
 from collections import defaultdict
 from typing import List, Dict
-from logging.handlers import RotatingFileHandler
 import pandas as pd
 import orjson
 
@@ -24,7 +23,7 @@ DESC = r"""
          \|     \|   |   |    \|  |___/      \__/         \|     \|  |     \
                          windows made quick and easy
 """
-
+# pylint: disable=unused-argument
 def json_to_csv(json_data: dict, csv_filename: str):
     """
     This function converts a 2D dictionary to CSV format using the pandas library.
@@ -33,35 +32,27 @@ def json_to_csv(json_data: dict, csv_filename: str):
         json_data (dict): The 2D dictionary to convert.
         csv_filename (str): The name of the output CSV file.
     """
-    # Flatten the 2D dictionary into a list of dictionaries for pandas
-    flattened_data = []
-    for window_index, entries in json_data.items():
-        for entry_index, entry in entries.items():
-            # Add window_index and entry_index to the entry dictionary
-            flattened_entry = {'window_index': window_index, 'entry_index': entry_index}
-            # Update the entry dictionary with the data from the original entry
-            flattened_entry.update(entry)
-            # Append the flattened entry to the list
-            flattened_data.append(flattened_entry)
 
+    # Houston, we have a problem here
+    # CSV is being dumped 2D style
+    # This is not the way to do it
+    flattened_data = []
     # Convert the list of dictionaries to a DataFrame
     df = pd.DataFrame(flattened_data)
 
     # Save the DataFrame to a CSV file
     df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
-    # Logger does not work in this function, so print is used as a workaround
-    logging.info("Saved to %s", csv_filename)
 
 def parse_ecu_names(data: dict):
     """
     Extract ECU names from JSON data.
-
     Args:
         data : List of dictionaries containing ECU information.
 
     Returns:
         list: A list of ECU names found in the data.
     """
+    logging.debug("Extracting ECU names from JSON data")
     ecu_names = set()
 
     for row in data:
@@ -69,6 +60,7 @@ def parse_ecu_names(data: dict):
         if name and name != "Unknown":  # Ignore "Unknown" names
             ecu_names.add(name)
 
+    logging.debug("ECU names extracted")
     return list(ecu_names)
 
 def read_file(file_name: str):
@@ -83,6 +75,7 @@ def read_file(file_name: str):
         - orjson is used instead of the built-in json module due to its
           performance benefits, especially for large files.
     """
+    logging.debug("Reading JSON file: %s", file_name)
     try:
         with open(file_name, "r", encoding="utf-8") as file:
             return orjson.loads(file.read())
@@ -112,44 +105,30 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
     parser.add_argument('-s', '--step', type=float, default=None,
-                    help='How many seconds the window moves forward '
-                    '(default: same as window length)')
-    parser.add_argument('-loglvl', '--log-level', type=lambda s: s.upper(),
-                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                        default='INFO', help='Set logging level, default: INFO')
+                        help='How many seconds the window moves forward '
+                             '(default: same as window length)')
+    parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging')
 
     return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
-def log_setup(log_level: str):
+def log_setup(debug: bool):
     """
-    Setup for logger. Handlers for both file and console logging.
-
-    File logging uses rotation so file won't get too big and it keeps one backup.
-
-    Console logging for real-time feedback (if needed)
-
+    Setup for logger. Logs errors to stderr by default, and everything if debug is enabled.
     """
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG if debug else logging.ERROR)
 
-    #Format of logs and date
+    # Format of logs and date
     log_format = "%(asctime)s - %(levelname)s - %(message)s"
     date_format = "%d.%m.%Y %H:%M:%S"
 
-    #Create handler for file logging with rotation,
-    # makes new file when closing maxBytes and keeps one backup, file always logs everything in code
-    file_handler = RotatingFileHandler("Windower.log", maxBytes = 1024*1024, backupCount = 1)
-    file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-    file_handler.setLevel(logging.DEBUG)
-
-    #Handler for console logging, user set level for console logging
+    # Handler for console logging
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-    console_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+    console_handler.setLevel(logging.DEBUG if debug else logging.ERROR)
 
-    #Add both handlers if logger is empty (no handlers added already)
+    # Add the handler if logger is empty (no handlers added already)
     if not logger.hasHandlers():
-        logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
 def create_windows(
@@ -190,6 +169,12 @@ def create_windows(
     start_time = min_time # Set the start time to the minimum timestamp
     data_index = 0 # Marks the start of each new window, avoiding revisiting data from the start.
 
+    logging.debug(
+        "Creating windows with length %f seconds and step %f seconds",
+        window_length,
+        step
+    )
+
     while start_time <= max_time:
         # Reset entry index for each window
         entry_index = 0
@@ -217,17 +202,15 @@ def create_windows(
         start_time += step
         window_index += 1
 
+    logging.debug("Windows created")
     return dict(windows)
 
 def main():
     """
         Entrypoint
     """
-
     args = handle_args()
-    log_setup(args.log_level)
-
-    logging.info("Logging level set to %s", args.log_level.upper())
+    log_setup(args.debug)
 
     data = read_file(args.file)
 
@@ -240,7 +223,6 @@ def main():
     # If the length argument is provided, create windows
     if args.length:
         windows = create_windows(data, args.length, args.step, args.ecu)
-
         if not windows:
             logging.error("No windows created. Exiting.")
             return
@@ -250,6 +232,7 @@ def main():
             pass
         elif args.output_csv:
             json_to_csv(windows, args.output_csv)
+            logging.debug("Windows saved to CSV file: %s", args.output_csv)
         else:
             logging.error("No output format specified. Exiting.")
         return
