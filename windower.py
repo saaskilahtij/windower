@@ -35,10 +35,8 @@ def json_to_csv(json_data: dict, csv_filename: str):
 
     # Houston, we have a problem here
     # CSV is being dumped 2D style
-    # This is not the way to do it
-    flattened_data = []
     # Convert the list of dictionaries to a DataFrame
-    df = pd.DataFrame(flattened_data)
+    df = pd.DataFrame(json_data)
 
     # Save the DataFrame to a CSV file
     df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
@@ -154,9 +152,17 @@ def create_windows(
     windows = defaultdict(dict)
 
     # Determine the starting and ending timestamps
-    min_time = data[0]['timestamp']
-    max_time = data[-1]['timestamp']
-
+    # Some additional error handling if first or last element is malformed
+    # This can not be done earlier on the reading phase so it's cursed
+    for entry in data:
+        if 'timestamp' in entry:
+            min_time = entry['timestamp']
+            break
+    for entry in reversed(data):
+        if 'timestamp' in entry:
+            max_time = entry['timestamp']
+            break
+    
     if step is None:
         step = window_length
 
@@ -180,11 +186,13 @@ def create_windows(
         entry_index = 0
 
         # Move data_index to the start of the current window
+        # This code breaks if there are bad entries
         while data_index < len(data) and data[data_index]['timestamp'] < start_time:
             data_index += 1
 
         # Iterate only through entries belonging to the current window
         i = data_index
+        #if 'timestamp' in data[i]:
         while i < len(data) and data[i]['timestamp'] < (start_time + window_length):
             entry = data[i]
 
