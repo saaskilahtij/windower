@@ -25,17 +25,17 @@ DESC = r"""
                          windows made quick and easy
 """
 
-def json_to_csv(json_data: dict, csv_filename: str):
+def dict_to_csv(data: dict, csv_filename: str):
     """
     This function converts a 2D dictionary to CSV format using the pandas library.
 
     Args:
-        json_data (dict): The 2D dictionary to convert.
+        data (dict): The 2D dictionary to convert.
         csv_filename (str): The name of the output CSV file.
     """
     # Flatten the 2D dictionary into a list of dictionaries for pandas
     flattened_data = []
-    for window_index, entries in json_data.items():
+    for window_index, entries in data.items():
         for entry_index, entry in entries.items():
             # Add window_index and entry_index to the entry dictionary
             flattened_entry = {'window_index': window_index, 'entry_index': entry_index}
@@ -45,14 +45,74 @@ def json_to_csv(json_data: dict, csv_filename: str):
             flattened_data.append(flattened_entry)
 
     # Convert the list of dictionaries to a DataFrame
-    df = pd.DataFrame(flattened_data)
+    df = pd.DataFrame(flattened_data) 
 
+    # Ensure filename ends with .csv
+    if not csv_filename.endswith(".csv"):
+        csv_filename += ".csv"
     # Save the DataFrame to a CSV file
     df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
     # Logger does not work in this function, so print is used as a workaround
     logging.info("Saved to %s", csv_filename)
 
-def parse_ecu_names(data: dict):
+def dict_to_json(data: dict, json_filename: str):
+    """
+    This function converts a 2D dictionary to JSON format using the orjson library.
+
+    Args:
+        data (dict): The 2D dictionary to convert.
+        json_filename (str): The name of the output JSON file.
+    """
+    # Flatten the 2D dictionary into a list of dictionaries
+    flattened_data = []
+    for window_index, entries in data.items():
+        for entry_index, entry in entries.items():
+            # Add window_index and entry_index to the entry dictionary
+            flattened_entry = {'window_index': window_index, 'entry_index': entry_index}
+            # Update the entry dictionary with the data from the original entry
+            flattened_entry.update(entry)
+            # Append the flattened entry to the list
+            flattened_data.append(flattened_entry)
+
+    # Ensure filename ends with .json
+    if not json_filename.endswith(".json"):
+        json_filename += ".json"
+
+    try:
+        with open(json_filename, "w") as f:
+            logging.info(f"Saving to {json_filename}...")
+            f.write("[\n")
+            for i, row in enumerate(flattened_data):
+                f.write(orjson.dumps(row, option=orjson.OPT_NON_STR_KEYS).decode("utf-8"))
+                if i < len(flattened_data) - 1:
+                    f.write(",\n")
+                else:
+                    f.write("\n]")
+        logging.info(f"{json_filename} saved successfully")
+        
+    except (orjson.JSONEncodeError, ValueError, TypeError) as e:
+        logging.error(f"Error in JSON conversion: {e}", exc_info=True)
+    except Exception as e:
+        logging.critical(f"Unexpected error: {e}", exc_info=True)
+        
+def clean_data(data: list):
+    """
+    This function removes all the 'unknown' ECU data from the data set.
+
+    Args:
+        data : List of dictionaries containing ECU information.
+
+    Returns:
+        list: A cleaned dict which contains only data of known ECUs.
+    """
+    cleaned_data = []
+    for row in data:
+        name = row.get("name")
+        if name != "Unknown":
+            cleaned_data.append(row)
+    return cleaned_data
+
+def parse_ecu_names(data: list):
     """
     Extract ECU names from JSON data.
 
@@ -85,7 +145,13 @@ def read_file(file_name: str):
     """
     try:
         with open(file_name, "r", encoding="utf-8") as file:
-            return orjson.loads(file.read())
+            logging.info(f"Reading {file_name}...")
+            data = orjson.loads(file.read())
+            logging.info(f"{file_name} read succesfully!")
+            logging.info("Cleaning data...")
+            cleaned_data = clean_data(data)
+            logging.info("Data cleaned!")
+            return cleaned_data
     except FileNotFoundError:
         logging.error("Error: The file '%s' was not found.", file_name)
     except ValueError as e:
@@ -107,7 +173,7 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-f', '--file', type=str, help='Path to the JSON file',
                         required=True)
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
-    parser.add_argument('-json', '--output-json', action='store_true', help='Output as JSON')
+    parser.add_argument('-json', '--output-json', type=str, help='Output file name')
     parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
     parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
@@ -246,10 +312,9 @@ def main():
             return
         if args.output_json:
             # pylint: disable=fixme
-            # TODO: Dump data to JSON
-            pass
+            dict_to_json(windows, args.output_json)
         elif args.output_csv:
-            json_to_csv(windows, args.output_csv)
+            dict_to_csv(windows, args.output_csv)
         else:
             logging.error("No output format specified. Exiting.")
         return
