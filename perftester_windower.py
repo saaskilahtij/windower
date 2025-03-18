@@ -37,6 +37,7 @@ if __name__ == "__main__":
         """Tests the performance and memory usage of windower.json_to_csv()"""
         json_data = windower.read_file(TEST_FILE)  # Read JSON file
         csv_filename = "output.csv"  # Specify the output CSV file name
+        # pylint:disable=no-value-for-parameter
         return windower.json_to_csv(json_data, csv_filename)  # Convert to CSV
 
     # Run performance test for the read_file fuction
