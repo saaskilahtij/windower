@@ -83,7 +83,7 @@ def handle_args() -> argparse.Namespace:
                         required=True)
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
     parser.add_argument('-json', '--output-json', action='store_true', help='Output as JSON')
-    parser.add_argument('-ecu', '--ecu-names', action='store_true', help='List ECU names')
+    parser.add_argument('-ecus', '--ecu-names', action='store_true', help='List ECU names')
     parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
     parser.add_argument('-s', '--step', type=float, default=None,
@@ -183,6 +183,7 @@ def create_windows(data: List[Dict], window_length: float, step: float = None) -
         step = window_length
         
     results = []
+    # TODO add error handling here if no 'timestamp'
     min_time = df["timestamp"].min()
     max_time = df["timestamp"].max()
     
