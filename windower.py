@@ -25,37 +25,6 @@ DESC = r"""
                          windows made quick and easy
 """
 
-""" def json_to_csv(json_data: dict, csv_filename: str):
-    
-    This function converts a 2D dictionary to CSV format using the pandas library.
-
-    Args:
-        json_data (dict): The 2D dictionary to convert.
-        csv_filename (str): The name of the output CSV file.
-    
-    # Flatten the 2D dictionary into a list of dictionaries for pandas
-    flattened_data = []
-    for window_index, entries in json_data.items():
-        for entry_index, entry in entries.items():
-            # Add window_index and entry_index to the entry dictionary
-            flattened_entry = {'window_index': window_index, 'entry_index': entry_index}
-            # Update the entry dictionary with the data from the original entry
-            flattened_entry.update(entry)
-            # Append the flattened entry to the list
-            flattened_data.append(flattened_entry)
-
-    # Houston, we have a problem here
-    # CSV is being dumped 2D style
-    # This is not the way to do it
-    flattened_data = []
-    # Convert the list of dictionaries to a DataFrame
-    df = pd.DataFrame(flattened_data)
-
-    # Save the DataFrame to a CSV file
-    df.to_csv(csv_filename, index=False, sep=";", encoding="utf-8-sig")
-    # Logger does not work in this function, so print is used as a workaround
-    logging.info("Saved to %s", csv_filename)
- """
 def parse_ecu_names(data: dict):
     """
     Extract ECU names from JSON data.
@@ -144,198 +113,146 @@ def log_setup(debug: bool):
     if not logger.hasHandlers():
         logger.addHandler(console_handler)
 
-""" def create_windows(
-        data: List[Dict],
-        window_length: int,
-        step: int = None,
-        ecu_name: str = None
-    ) -> Dict[int, Dict[int, Dict]]:
+def filter_and_process_data(data: List[Dict], ecu_name: str = None) -> List[Dict]:
+    """
+    Filter and process data based on ECU name and convert data fields to numeric values.
     
-    Creates time-based windows from sorted data based on the given window length.
-
-    :param data: A list of dictionaries containing timestamped data.
-    :param window_length: Length of each window in seconds.
-    :param step: How many seconds the window moves forward (default: same as window length).
-    :param ecu_name: Filter data by specific ECU name.
-    :return: A 2D dictionary where windows[window_index][entry_index] contains data entries.
-    
-    if not data:
-        return {}
-
-    # Initialize the windows dictionary
-    # defaultdict makes sure that missing keys do not raise errors
-    windows = defaultdict(dict)
-
-    # Determine the starting and ending timestamps
-    min_time = data[0]['timestamp']
-    max_time = data[-1]['timestamp']
-
-    if step is None:
-        step = window_length
-
-    if step <= 0:
-        logging.error("Step size must be greater than zero.")
-        return {}
-
-    window_index = 0  # Track the current window index
-    entry_index = 0  # Track the index within a window
-    start_time = min_time # Set the start time to the minimum timestamp
-    data_index = 0 # Marks the start of each new window, avoiding revisiting data from the start.
-
-    logging.debug(
-        "Creating windows with length %f seconds and step %f seconds",
-        window_length,
-        step
-    )
-
-    while start_time <= max_time:
-        # Reset entry index for each window
-        entry_index = 0
-
-        # Move data_index to the start of the current window
-        while data_index < len(data) and data[data_index]['timestamp'] < start_time:
-            data_index += 1
-
-        # Iterate only through entries belonging to the current window
-        i = data_index
-        while i < len(data) and data[i]['timestamp'] < (start_time + window_length):
-            entry = data[i]
-
-            # If filtering by ECU name, skip other ECUs
-            if ecu_name and entry.get("name", "").lower() != ecu_name.lower():
-                i += 1
-                continue
-
-            # Assign the entry to the current window
-            windows[window_index][entry_index] = entry
-            entry_index += 1
-            i += 1
-
-        # Move to the next window by step size
-        start_time += step
-        window_index += 1
-
-    return dict(windows) """
-
-def json_to_csv(data: List[Dict],
-                window_length: int,
-                csv_filename: str,
-                step: int = None,
-                ecu_name: str = None):
-    if not data:
-        logging.error("No data found from JSON")
-        return
-    if step is None:
-        step = window_length
-    if step <= 0:
-        logging.error("Step size must be greater than zero.")
-        return
-
-    #Filter data with given ecu name / names(?)
+    Args:
+        data: List of dictionaries containing the data.
+        ecu_name: Filter data by specific ECU name.
+        
+    Returns:
+        List of filtered and processed data entries with numeric values.
+    """
     filtered_data = []
-    if ecu_name is not None:
-        for entry in data:
-            if entry.get("name","").lower() == ecu_name.lower():
-                raw_data = entry.get("data", "{}").strip()
-                try:
-                    #Quotes fix
-                    raw_data = raw_data.replace("'", "\"")
-                    parsed_data = orjson.loads(raw_data)
-                except orjson.JSONDecodeError:
-                    logging.debug(f"Skipping malformed 'data' field in entry: {entry}")
-                    continue
+    
+    for entry in data:
+        # If ecu_name is specified, filter by that name, otherwise exclude "Unknown" entries
+        if (ecu_name is not None and entry.get("name", "").lower() == ecu_name.lower()) or \
+           (ecu_name is None and entry.get("name", "").lower() != "unknown"):
+            
+            raw_data = entry.get("data", "{}").strip()
+            try:
+                # Fix quotes and parse JSON data
+                raw_data = raw_data.replace("'", "\"")
+                parsed_data = orjson.loads(raw_data)
+            except orjson.JSONDecodeError:
+                logging.debug(f"Skipping malformed 'data' field in entry: {entry}")
+                continue
+                
+            # Skip entries with non-numeric values
+            if any(isinstance(v, str) for v in parsed_data.values()):
+                continue
+                
+            # Convert values to float
+            numeric_values = {
+                k: float(v) if isinstance(v, (int, float)) else v
+                for k, v in parsed_data.items()
+            }
+                
+            # Add entry to filtered data
+            timestamp = entry.get("timestamp", 0.0)
+            filtered_data.append({
+                "timestamp": float(timestamp),
+                **numeric_values
+            })
+                
+    return filtered_data
 
-                #Only numeric values from data
-                if any(isinstance(v, str) for v in parsed_data.values()):
-                    continue
-
-                numeric_values = {
-                    k: float(v) if isinstance(v, (int, float)) else v
-                    for k,v in parsed_data.items()
-                }
-                #Add entry to filtered data
-                timestamp = entry.get("timestamp", 0.0)
-                filtered_data.append({
-                    "timestamp": float(timestamp),
-                    **numeric_values
-                })
-    #If not filtered with ecu name, filter only Unknowns
-    elif ecu_name is None:
-        for entry in data:
-            #Filter all name "Unknown"
-            if entry.get("name", "").lower() != "Unknown".lower():
-                raw_data = entry.get("data", "{}").strip()
-                try:
-                    raw_data = raw_data.replace("'", "\"") #Quotes fix
-                    parsed_data = orjson.loads(raw_data)
-                except orjson.JSONDecodeError:
-                    logging.debug(f"Skipping malformed 'data' field in entry: {entry}")
-                    continue
-
-                #Only numeric values
-                if any(isinstance(v, str) for v in parsed_data.values()):
-                    continue
-
-                numeric_values = {
-                    k: float(v) if isinstance(v, (int, float)) else v
-                    for k,v in parsed_data.items()
-                }
-                #Add entry to filtered data
-                timestamp = entry.get("timestamp", 0.0)
-                filtered_data.append({
-                    "timestamp": float(timestamp),
-                    **numeric_values
-                })
-    if not filtered_data:
+def create_windows(data: List[Dict], window_length: float, step: float = None) -> pd.DataFrame:
+    """
+    Creates time-based windows from sorted data and calculates statistics for each window.
+    
+    Args:
+        data: List of dictionaries containing the data.
+        window_length: Length of each window in seconds.
+        step: How many seconds the window moves forward (default: same as window length).
+        
+    Returns:
+        DataFrame containing statistics for each window.
+    """
+    if not data:
         logging.debug("No valid entries to process")
-        return
-
-    #Process filtered data and calculate the sliding windows
-    df = pd.DataFrame(filtered_data)
+        return pd.DataFrame()
+        
+    # Convert to DataFrame and sort by timestamp
+    df = pd.DataFrame(data)
     df = df.sort_values("timestamp")
-
+    
+    if step is None:
+        step = window_length
+        
     results = []
     min_time = df["timestamp"].min()
     max_time = df["timestamp"].max()
-
+    
     start_time = min_time
     window_index = 0
+    
     while start_time <= max_time:
         end_time = start_time + window_length
         window_df = df[(df["timestamp"] >= start_time) & (df["timestamp"] < end_time)]
-
+        
         if not window_df.empty:
             numeric_columns = window_df.select_dtypes(include=["number"]).columns
             numeric_columns = [col for col in numeric_columns if col != "timestamp"]
-
+            
             stats = window_df[numeric_columns].agg(["min", "max", "mean", "std"]).to_dict()
-
             flat_stats = {f"{stat}_{key}": value for key, values in stats.items() for stat, value in values.items()}
-
-            #Append results with window index and window start + window end
+            
+            # Append results with window index and window start + window end
             results.append({
                 "window_index": window_index,
                 "window_start": start_time,
                 "window_end": end_time,
                 **flat_stats
             })
-
-            #Increase window index for next window
+            
+            # Increase window index for next window
             window_index += 1
-
+            
         start_time += step
+        
+    return pd.DataFrame(results)
 
-    results_df = pd.DataFrame(results)
-
+def json_to_csv(data: List[Dict], window_length: float, csv_filename: str, step: float = None, ecu_name: str = None):
+    """
+    Process JSON data, create windows, and save results to CSV.
+    
+    Args:
+        data: List of dictionaries containing the data.
+        window_length: Length of each window in seconds.
+        csv_filename: Output CSV filename.
+        step: How many seconds the window moves forward (default: same as window length).
+        ecu_name: Filter data by specific ECU name.
+    """
+    if not data:
+        logging.error("No data found from JSON")
+        return
+        
+    if step is not None and step <= 0:
+        logging.error("Step size must be greater than zero.")
+        return
+        
+    # Filter and process the data
+    filtered_data = filter_and_process_data(data, ecu_name)
+    
+    if not filtered_data:
+        logging.debug("No valid entries to process after filtering")
+        return
+        
+    # Create windows and calculate statistics
+    results_df = create_windows(filtered_data, window_length, step)
+    
     if results_df.empty:
+        min_time = min(entry["timestamp"] for entry in filtered_data)
+        max_time = max(entry["timestamp"] for entry in filtered_data)
         logging.info(f"No data found in window between {min_time} and {max_time}")
         return
-
-    #Write CSV using Pandas
+        
+    # Write CSV using Pandas
     results_df.to_csv(csv_filename, sep=";", index=False, encoding="utf-8-sig")
     logging.info("CSV file saved: %s", csv_filename)
-
-
 
 def main():
     """
@@ -354,12 +271,11 @@ def main():
 
     # If the length argument is provided, create windows
     if args.length and args.output_csv:
-        json_to_csv(data,args.length, args.output_csv, args.step, args.ecu)
-
+        json_to_csv(data, args.length, args.output_csv, args.step, args.ecu)
     elif args.length and args.output_json:
-            # pylint: disable=fixme
-            # TODO: Dump data to JSON
-            pass
+        # pylint: disable=fixme
+        # TODO: Dump data to JSON
+        pass
     else:
         logging.error("No output format specified. Exiting.")
     return
