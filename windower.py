@@ -23,7 +23,7 @@ DESC = r"""
                          windows made quick and easy
 """
 
-        
+
 def clean_data(data: list) -> list[Dict]:
     """
     This function removes all the 'unknown' ECU data from the data set.
@@ -77,7 +77,7 @@ def read_file(file_name: str):
     try:
         with open(file_name, "r", encoding="utf-8") as file:
             data = orjson.loads(file.read())
-            logging.info(f"{file_name} read succesfully!")
+            logging.info("%s read successfully!", file_name)
             logging.debug("Cleaning data...")
             cleaned_data = clean_data(data)
             logging.info("Data cleaned!")
@@ -105,7 +105,7 @@ def handle_args() -> argparse.Namespace:
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
     parser.add_argument('-json', '--output-json', type=str, help='Output file name')
     parser.add_argument('-ecus', '--ecu-names', action='store_true', help='List ECU names')
-    parser.add_argument('-e', '--ecu', type=str, help='Filter data by specific ECU name')
+    parser.add_argument('-e', '--ecu', nargs='+', help='Filter data by specific ECU name(s)')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
     parser.add_argument('-s', '--step', type=float, default=None,
                         help='How many seconds the window moves forward '
@@ -134,23 +134,51 @@ def log_setup(debug: bool):
     if not logger.hasHandlers():
         logger.addHandler(console_handler)
 
-def filter_and_process_data(data: List[Dict], ecu_name: str = None) -> List[Dict]:
+def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> List[Dict]:
     """
     Filter and process data based on ECU name and convert data fields to numeric values.
-    
+
     Args:
         data: List of dictionaries containing the data.
         ecu_name: Filter data by specific ECU name.
-        
+
     Returns:
         List of filtered and processed data entries with numeric values.
     """
     filtered_data = []
 
     for entry in data:
-        # If ecu_name is specified, filter by that name, otherwise exclude "Unknown" entries
-        if (ecu_name is not None and entry.get("name", "").lower() == ecu_name.lower()) or \
-           (ecu_name is None and entry.get("name", "").lower() != "unknown"):
+        #If ecu_name(s) is not specified (no filter, prints everything)
+        if ecu_name is None:
+
+            raw_data = entry.get("data", "{}").strip()
+            try:
+                # Fix quotes and parse JSON data
+                raw_data = raw_data.replace("'", "\"")
+                parsed_data = orjson.loads(raw_data)
+            except orjson.JSONDecodeError:
+                logging.debug("Skipping malformed 'data' field in entry: %s", entry)
+                continue
+
+            # Skip entries with non-numeric values
+            if any(isinstance(v, str) for v in parsed_data.values()):
+                continue
+
+            # Convert values to float
+            numeric_values = {
+                k: float(v) if isinstance(v, (int, float)) else v
+                for k, v in parsed_data.items()
+            }
+
+            # Add entry to filtered data
+            timestamp = entry.get("timestamp", 0.0)
+            filtered_data.append({
+                "timestamp": float(timestamp),
+                **numeric_values
+            })
+
+        # If ecu_name(s) is specified, filter by that name
+        elif (ecu_name is not None and entry.get("name", "").lower() in ecu_name):
 
             raw_data = entry.get("data", "{}").strip()
             try:
@@ -186,12 +214,12 @@ def create_windows(
     step: float = None) -> pd.DataFrame:
     """
     Creates time-based windows from sorted data and calculates statistics for each window.
-    
+
     Args:
         data: List of dictionaries containing the data.
         window_length: Length of each window in seconds.
         step: How many seconds the window moves forward (default: same as window length).
-        
+
     Returns:
         DataFrame containing statistics for each window.
     """
@@ -223,7 +251,9 @@ def create_windows(
             numeric_columns = [col for col in numeric_columns if col != "timestamp"]
 
             stats = window_df[numeric_columns].agg(["min", "max", "mean", "std"]).to_dict()
-            flat_stats = {f"{stat}_{key}": value for key, values in stats.items() for stat, value in values.items()}
+            flat_stats = {f"{stat}_{key}": value
+                          for key, values in stats.items()
+                          for stat, value in values.items()}
 
             # Append results with window index and window start + window end
             results.append({
@@ -245,10 +275,10 @@ def dict_to_csv(
         window_length: float,
         csv_filename: str,
         step: float = None,
-        ecu_name: str = None):
+        ecu_name: List[str] = None):
     """
     Process JSON data, create windows, and save results to CSV.
-    
+
     Args:
         data: List of dictionaries containing the data.
         window_length: Length of each window in seconds.
@@ -283,7 +313,7 @@ def dict_to_csv(
     # Write CSV using Pandas
     results_df.to_csv(csv_filename, sep=";", index=False, encoding="utf-8-sig")
     logging.info("CSV file saved: %s", csv_filename)
-    
+
 def dict_to_json(data: dict, json_filename: str):
     """
     This function converts a 2D dictionary to JSON format using the orjson library.
@@ -309,7 +339,7 @@ def dict_to_json(data: dict, json_filename: str):
 
     try:
         with open(json_filename, "w") as f:
-            logging.debug(f"Saving to {json_filename}...")
+            logging.debug("Saving to %s...", json_filename)
             f.write("[\n")
             for i, row in enumerate(flattened_data):
                 f.write(orjson.dumps(row, option=orjson.OPT_NON_STR_KEYS).decode("utf-8"))
@@ -317,8 +347,8 @@ def dict_to_json(data: dict, json_filename: str):
                     f.write(",\n")
                 else:
                     f.write("\n]")
-        logging.info(f"{json_filename} saved successfully")
-        
+        logging.info("%s saved successfully", json_filename)
+
     except (orjson.JSONEncodeError, ValueError, TypeError) as e:
         logging.error(f"Error in JSON conversion: {e}", exc_info=True)
     except Exception as e:
@@ -332,6 +362,7 @@ def main():
     log_setup(args.debug)
 
     data = read_file(args.file)
+    ecu_filter = args.ecu
 
     if args.ecu_names:
         if data:
@@ -341,7 +372,7 @@ def main():
 
     # If the length argument is provided, create windows
     if args.length and args.output_csv:
-         dict_to_csv(data, args.length, args.output_csv, args.step, args.ecu)
+        dict_to_csv(data, args.length, args.output_csv, args.step, ecu_filter)
     elif args.length and args.output_json:
         # pylint: disable=fixme
         # TODO: Dump data to JSON
