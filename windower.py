@@ -148,7 +148,12 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
     filtered_data = []
 
     for entry in data:
-        #If ecu_name(s) is not specified (no filter, prints everything)
+        timestamp = entry.get("timestamp")
+        # Skip the row if timestamp is missing or invalid (not an int or float)
+        if timestamp is None or not isinstance(timestamp, (int, float)):
+            logging.debug("Row skipped. Missing or invalid timestamp")
+            continue
+        # If ecu_name(s) is not specified (no filter, prints everything)
         if ecu_name is None:
 
             raw_data = entry.get("data", "{}").strip()
@@ -235,7 +240,7 @@ def create_windows(
         step = window_length
 
     results = []
-    # TODO add error handling here if no 'timestamp'
+    # TODO add error handling here if no 'timestamp' // Can the rows without a timestamp be filtered out earlier?
     min_time = df["timestamp"].min()
     max_time = df["timestamp"].max()
 
@@ -338,7 +343,7 @@ def dict_to_json(data: dict, json_filename: str):
         json_filename += ".json"
 
     try:
-        with open(json_filename, "w") as f:
+        with open(json_filename, "w", encoding="utf-8") as f:
             logging.debug("Saving to %s...", json_filename)
             f.write("[\n")
             for i, row in enumerate(flattened_data):
@@ -350,9 +355,9 @@ def dict_to_json(data: dict, json_filename: str):
         logging.info("%s saved successfully", json_filename)
 
     except (orjson.JSONEncodeError, ValueError, TypeError) as e:
-        logging.error(f"Error in JSON conversion: {e}", exc_info=True)
+        logging.error("Error in JSON conversion: %s", e, exc_info=True)
     except Exception as e:
-        logging.critical(f"Unexpected error: {e}", exc_info=True)
+        logging.critical("Unexpected error: %s", e, exc_info=True)
 
 def main():
     """
