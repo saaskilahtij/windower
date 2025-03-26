@@ -17,6 +17,11 @@ class TestWindower(unittest.TestCase):
     Tests:
         - test_ecu_names_flow: Verifies that the main function correctly prints the
           ECU names by mocking the read_file and parse_ecu_names functions.
+        - test_clean_data_removes_unknowns: Verifies that the clean_data function 
+          correctly removes entries where the name field is "Unknown".
+        - test_filter_and_process_data_with_known_ecu:
+          Tests the function by filtering data based on the "BRAKE" ECU name
+          and ensuring that only "BRAKE" data entries are processed and returned.
     """
     @patch("windower.parse_ecu_names", return_value=["ECU1", "ECU2"])
     @patch("windower.read_file", return_value=[{"name": "ECU1"}, {"name": "ECU2"}])
