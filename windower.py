@@ -105,7 +105,7 @@ def handle_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
                         required=True)
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
     parser.add_argument('-json', '--output-json', type=str, help='Output file name')
-    parser.add_argument('-ecus', '--ecu-names', action='store_true', help='List ECU names')
+    parser.add_argument('-list', '--list-ecus', action='store_true', help='List ECU names')
     parser.add_argument('-e', '--ecu', nargs='+', help='Filter data by specific ECU name(s)')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
     parser.add_argument('-s', '--step', type=float, default=None,
@@ -370,7 +370,7 @@ def main():
     data = read_file(args.file)
     ecu_filter = args.ecu
 
-    if args.ecu_names:
+    if args.list_ecus:
         if data:
             ecu_names = parse_ecu_names(data)
             print(f"ECU names found in the data: {', '.join(ecu_names)}")
