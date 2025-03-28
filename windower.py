@@ -88,10 +88,11 @@ def read_file(file_name: str):
         logging.error(e)
     return None
 
-def handle_args() -> argparse.Namespace:
+def handle_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
     """
     This function parses the arguments
     Returns:
+        Argument parser object
         Parsed args
     Note:
         The return can seem a bit funny. However, it makes sure that
@@ -112,7 +113,7 @@ def handle_args() -> argparse.Namespace:
                              '(default: same as window length)')
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging')
 
-    return parser.parse_args(args=None if sys.argv[1:] else ['--help'])
+    return parser, parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
 def log_setup(debug: bool):
     """
@@ -363,7 +364,7 @@ def main():
     """
         Entrypoint
     """
-    args = handle_args()
+    argparser, args = handle_args()
     log_setup(args.debug)
 
     data = read_file(args.file)
@@ -383,7 +384,7 @@ def main():
         # TODO: Dump data to JSON
         pass
     else:
-        logging.error("No output format specified. Exiting.")
+        argparser.print_help()
     return
 
 if __name__ == '__main__':
