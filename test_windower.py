@@ -5,7 +5,7 @@ Description: This file contains the windower unit tests
 """
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import sys
 import windower
 
@@ -22,6 +22,8 @@ class TestWindower(unittest.TestCase):
         - test_filter_and_process_data_with_known_ecu:
           Tests the function by filtering data based on the "BRAKE" ECU name
           and ensuring that only "BRAKE" data entries are processed and returned.
+        - test_filter_and_process_data_invalid_timestamp:  
+        - test_main_no_output_format:
     """
     @patch("windower.parse_ecu_names", return_value=["ECU1", "ECU2"])
     @patch("windower.read_file", return_value=[{"name": "ECU1"}, {"name": "ECU2"}])
@@ -81,6 +83,40 @@ class TestWindower(unittest.TestCase):
 
         output = windower.filter_and_process_data(input_data, ecu_name=["brake"])
         self.assertEqual(output, expected_output)
+
+    def test_filter_and_process_data_invalid_timestamp(self):
+        """Test that filter_and_process_data skips rows with invalid timestamps."""
+        input_data = [
+            {"name": "BRAKE", "timestamp": 1717678137.6661446, "id": 166,
+             "data": "{\"BRAKE_AMOUNT\": 39, \"BRAKE_PEDAL\": 18}", "raw": "0x2700125000000037"},
+            {"name": "BRAKE", "timestamp": "invalid", "id": 166,
+             "data": "{\"BRAKE_AMOUNT\": 39, \"BRAKE_PEDAL\": 19}", "raw": "0x2700135000000038"}
+        ]
+        expected_output = [
+            {"timestamp": 1717678137.6661446, "BRAKE_AMOUNT": 39.0, "BRAKE_PEDAL": 18.0}
+        ]
+        output = windower.filter_and_process_data(input_data)
+        self.assertEqual(output, expected_output)
+
+    @patch("windower.handle_args", return_value=Mock(
+        file="dummy.json",
+        ecu=None,
+        ecu_names=False,
+        length=10,
+        output_csv=None,
+        output_json=None
+    ))
+    @patch("windower.read_file", return_value=[{"name": "ECU1"}, {"name": "ECU2"}])
+    def test_main_no_output_format(self, mock_read_file, mock_handle_args):
+        """
+        Test that main function logs an error if no output format is specified.
+        """
+        with self.assertLogs(level="ERROR") as log:
+            windower.main()
+            # Check if the appropriate error log was generated
+            self.assertIn("ERROR:root:No output format specified. Exiting.", log.output)
+            mock_handle_args.assert_called_once()
+            mock_read_file.assert_called_once_with("dummy.json")
 
 if __name__ == '__main__':
     unittest.main()
