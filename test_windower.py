@@ -55,15 +55,39 @@ class TestWindower(unittest.TestCase):
         mock_load.return_value = ["BRAKE", "SPEED"]
 
     def test_clean_data_removes_unknowns(self):
-        """Test that clean_data removes entries with name 'Unknown'."""
+        """
+        Test that clean_data removes entries with names containing 'unknown' 
+        (case-insensitive).
+
+        This test ensures that the clean_data function correctly filters out 
+        entries where the name field is 'Unknown', 'unknown', or any other 
+        case-insensitive variation of the word 'unknown'.
+        """
         input_data = [
             {"name": "ECU1"},
             {"name": "Unknown"},
+            {"name": "unknown"},
             {"name": "ECU2"},
+            {"name": "Unknown2"},
+            {"name": None},
+            {"name": ""},
+            {"name": "ECU3"},
+            {"name": "UNKNOWN"},
+            {"name": "UnKnOwN"},
+            {"name": "ECU4"},
+            {"name": "udnwknown"},
+            {"name": "Unknowm"},
+            {"name": "ECU5"}
         ]
         expected_output = [
             {"name": "ECU1"},
             {"name": "ECU2"},
+            {"name": "ECU3"},
+            {"name": "ECU4"},
+            {"name": "udnwknown"},
+            {"name": "Unknowm"},
+            {"name": "ECU5"}
+
         ]
         self.assertEqual(windower.clean_data(input_data), expected_output)
 
