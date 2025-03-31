@@ -24,9 +24,11 @@ DESC = r"""
 """
 
 
-def clean_data(data: list) -> list[Dict]:
+def clean_data(data: List[Dict]) -> List[Dict]:
     """
-    This function removes all the 'unknown' ECU data from the data set.
+    This  function filters out 
+    entries where the name field is 'Unknown', 'unknown', or any other 
+    case-insensitive variation of the word 'unknown'.
 
     Args:
         data : List of dictionaries containing ECU information.
@@ -37,13 +39,17 @@ def clean_data(data: list) -> list[Dict]:
     cleaned_data = []
     for row in data:
         name = row.get("name")
-        if name != "Unknown":
+        if not name:
+            continue
+        name = name.lower() if isinstance(name, str) else str(name).lower()  # Ensure name is a string
+        if "unknown" not in name:
             cleaned_data.append(row)
     return cleaned_data
 
-def parse_ecu_names(data: list) -> list:
+def parse_ecu_names(data: List[Dict]) -> list:
     """
-    Extract ECU names from JSON data.
+    clean_data function has been executed before this.
+    This function is used to extract the names of ECUs from the JSON data.
     Args:
         data : List of dictionaries containing ECU information.
 
@@ -55,8 +61,7 @@ def parse_ecu_names(data: list) -> list:
 
     for row in data:
         name = row.get("name")  # Extract name field
-        if name and name != "Unknown":  # Ignore "Unknown" names
-            ecu_names.add(name)
+        ecu_names.add(name)
 
     logging.debug("ECU names extracted")
     return list(ecu_names)
