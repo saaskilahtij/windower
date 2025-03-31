@@ -14,9 +14,19 @@ Description: Compares performance and memory usage of windower functions using p
 if __name__ == "__main__":
     import perftester
     import windower
+    import argparse
 
-    # JSON file used for testing, replace with the desired test file.
-    TEST_FILE = "can_dump_orig.json"
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Performance tester for windower functions")
+    parser.add_argument("-f", "--file", type=str,
+                       help="JSON file to use for testing (default: can_dump.json)")
+    args = parser.parse_args()
+
+    # Use the file specified in arguments, print help if no file specified
+    if args.file is None:
+        parser.print_help()
+        exit(1)
+    TEST_FILE = args.file
     CSV_FILENAME = "output.csv"
     WINDOW_LENGTH = 1
 
