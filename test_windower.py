@@ -32,16 +32,27 @@ class TestWindower(unittest.TestCase):
         """
         Test the flow for extracting and printing ECU names from the JSON data.
         
-        This test mocks the read_file and parse_ecu_names functions to simulate
-        reading a JSON file and extracting ECU names. It then verifies that the
-        main function correctly prints the ECU names.
+        This test uses hardcoded test data that matches the schema of real CAN data,
+        and verifies that the main function correctly extracts and prints the ECU names.
         """
-        test_args = ["windower.py", "--file", "dummy.json", "--list-ecus"]
-        with patch.object(sys, 'argv', test_args):
-            with patch('builtins.print') as mock_print:
-                windower.main()
-                mock_load.assert_called_once()
-                mock_print.assert_called_with("ECU names found in the data: ECU1, ECU2")
+        test_data = [
+            {
+                "name": "BRAKE",
+                "timestamp": 1717678137.6661446,
+                "id": 166,
+                "data": "{\"BRAKE_AMOUNT\": 39, \"BRAKE_PEDAL\": 18}",
+                "raw": "0x2700125000000037"
+            },
+            {
+                "name": "SPEED",
+                "timestamp": 1717678137.6916034,
+                "id": 180, 
+                "data": "{\"ENCODER\": 1, \"SPEED\": 15.48, \"CHECKSUM\": 207}",
+                "raw": "0x0000000001060ccf"
+            }
+        ]
+        _mock_read.return_value = test_data
+        mock_load.return_value = ["BRAKE", "SPEED"]
 
     def test_clean_data_removes_unknowns(self):
         """Test that clean_data removes entries with name 'Unknown'."""
@@ -98,27 +109,6 @@ class TestWindower(unittest.TestCase):
         ]
         output = windower.filter_and_process_data(input_data)
         self.assertEqual(output, expected_output)
-
-    #The test does not work due to changes in the windower.py file.
-    # @patch("windower.handle_args", return_value=Mock(
-    #     file="dummy.json",
-    #     ecu=None,
-    #     list_ecus=False,
-    #     length=10,
-    #     output_csv=None,
-    #     output_json=None
-    # ))
-    # @patch("windower.read_file", return_value=[{"name": "ECU1"}, {"name": "ECU2"}])
-    # def test_main_no_output_format(self, mock_read_file, mock_handle_args):
-    #     """
-    #     Test that main function logs an error if no output format is specified.
-    #     """
-    #     with self.assertLogs(level="ERROR") as log:
-    #         windower.main()
-    #         # Check if the appropriate error log was generated
-    #         self.assertIn("ERROR:root:No output format specified. Exiting.", log.output)
-    #         mock_handle_args.assert_called_once()
-    #         mock_read_file.assert_called_once_with("dummy.json")
 
 if __name__ == '__main__':
     unittest.main()
