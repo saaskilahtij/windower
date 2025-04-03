@@ -51,6 +51,7 @@ def parse_ecu_names(data: list) -> list:
         list: A list of ECU names found in the data.
     """
     logging.debug("Extracting ECU names from JSON data")
+    logging.debug("Data: %s", data)
     ecu_names = set()
 
     for row in data:
@@ -283,15 +284,16 @@ def create_windows(
     Returns:
         DataFrame containing statistics for each window.
     """
+    # Return empty DataFrame if no data provided
     if not data:
         logging.debug("No valid entries to process")
         return pd.DataFrame()
 
-    # Convert to DataFrame and sort by timestamp
+    # Convert list of dicts to DataFrame and sort chronologically
     try:
         df = pd.DataFrame(data)
         
-        # Ensure timestamp column exists
+        # Validate timestamp column exists
         if "timestamp" not in df.columns:
             logging.error("No timestamp column found in data")
             return pd.DataFrame()
@@ -301,10 +303,13 @@ def create_windows(
         logging.error("Error creating DataFrame: %s", e)
         return pd.DataFrame()
 
+    # If no step size provided, use window length
     if step is None:
         step = window_length
 
     results = []
+    
+    # Get time range of data
     try:
         min_time = df["timestamp"].min()
         max_time = df["timestamp"].max()
@@ -315,27 +320,34 @@ def create_windows(
     start_time = min_time
     window_index = 0
 
+    # Create windows by sliding over time range
     while start_time <= max_time:
         end_time = start_time + window_length
         try:
+            # Get data points within current window
             window_df = df[(df["timestamp"] >= start_time) & (df["timestamp"] < end_time)]
 
             if not window_df.empty:
+                # Get numeric columns except timestamp
                 numeric_columns = window_df.select_dtypes(include=["number"]).columns
                 numeric_columns = [col for col in numeric_columns if col != "timestamp"]
 
+                # Skip window if no numeric data found
                 if not numeric_columns:
                     logging.debug("No numeric columns found in window %d", window_index)
                     start_time += step
                     window_index += 1
                     continue
 
+                # Calculate statistics for numeric columns
                 stats = window_df[numeric_columns].agg(["min", "max", "mean", "std"]).to_dict()
+                
+                # Flatten stats dict into format: stat_column: value
                 flat_stats = {f"{stat}_{key}": value
                               for key, values in stats.items()
                               for stat, value in values.items()}
 
-                # Append results with window index and window start + window end
+                # Store window results with metadata
                 results.append({
                     "window_index": window_index,
                     "window_start": start_time,
@@ -343,13 +355,14 @@ def create_windows(
                     **flat_stats
                 })
 
-                # Increase window index for next window
                 window_index += 1
         except Exception as e:
             logging.error("Error processing window at %f: %s", start_time, e)
             
+        # Move window forward by step size
         start_time += step
 
+    # Convert results to DataFrame
     return pd.DataFrame(results)
 
 def dict_to_csv(
