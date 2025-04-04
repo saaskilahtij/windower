@@ -26,8 +26,8 @@ DESC = r"""
 
 def clean_data(data: List[Dict]) -> List[Dict]:
     """
-    This  function filters out 
-    entries where the name field is 'Unknown', 'unknown', or any other 
+    This  function filters out
+    entries where the name field is 'Unknown', 'unknown', or any other
     case-insensitive variation of the word 'unknown'.
 
     Args:
@@ -41,7 +41,8 @@ def clean_data(data: List[Dict]) -> List[Dict]:
         name = row.get("name")
         if not name:
             continue
-        name = name.lower() if isinstance(name, str) else str(name).lower()  # Ensure name is a string
+        # Ensure name is a string
+        name = name.lower() if isinstance(name, str) else str(name).lower()
         if "unknown" not in name:
             cleaned_data.append(row)
     return cleaned_data
@@ -57,7 +58,7 @@ def parse_ecu_names(data: List[Dict]) -> list:
         list: A list of ECU names found in the data.
     """
     logging.debug("Extracting ECU names from JSON data")
-    logging.debug("Data: %s", data)
+    #logging.debug("Data: %s", data)
     ecu_names = set()
 
     for row in data:
@@ -79,14 +80,14 @@ def read_file(file_name: str) -> Optional[List[Dict]]:
         - orjson is used instead of the built-in json module due to its
           performance benefits, especially for large files.
     """
-    logging.debug("Reading JSON file: %s", file_name)
+    logging.info("Reading JSON file: %s", file_name)
     try:
         with open(file_name, "r", encoding="utf-8") as file:
             data = orjson.loads(file.read())
-            logging.info("%s read successfully!", file_name)
+            logging.debug("%s read successfully!", file_name)
             logging.debug("Cleaning data...")
             cleaned_data = clean_data(data)
-            logging.info("Data cleaned!")
+            logging.debug("Data cleaned!")
             return cleaned_data
     except FileNotFoundError:
         logging.error("Error: The file '%s' was not found.", file_name)
@@ -113,22 +114,52 @@ def handle_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
                         required=True)
     parser.add_argument('-csv', '--output-csv', type=str, help='Output file name')
     parser.add_argument('-json', '--output-json', type=str, help='Output file name')
-    parser.add_argument('-list', '--list-ecus', action='store_true', help='List ECU names')
+    parser.add_argument('-list', '--list-ecus', action='store_true', help='List ECU names, can only be used with file and optional logging argument')
     parser.add_argument('-e', '--ecu', nargs='+', help='Filter data by specific ECU name(s)')
     parser.add_argument('-l', '--length', type=float, help='Window length in seconds')
     parser.add_argument('-s', '--step', type=float, default=None,
                         help='How many seconds the window moves forward '
                              '(default: same as window length)')
-    parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging')
 
-    return parser, parser.parse_args(args=None if sys.argv[1:] else ['--help'])
+    #Mutually exclusive logging (only one argument can be used)
+    log_level = parser.add_mutually_exclusive_group()
+    log_level.add_argument('-d', '--debug', action='store_true',
+                           help='Enable DEBUG logging, default: INFO logging')
+    log_level.add_argument('-q', '--quiet', action= 'store_true',
+                           help='Show only ERRORs, default: INFO logging')
 
-def log_setup(debug: bool):
+    args = parser.parse_args(args=None if sys.argv[1:] else ['--help'])
+
+    #-list/--list-ecus can only be used with file and optional logging level (only -f/--file, -list/--list-ecus and log loglevel)
+    if args.list_ecus:
+        other_args = any([
+            args.output_csv, args.output_json,
+            args.ecu, args.length, args.step
+        ])
+        if other_args:
+            parser.error("-list / --list-ecus can be only used with file and logging argument, no other arguments")
+
+    return parser, args
+
+def log_setup(level: str):
     """
-    Setup for logger. Logs errors to stderr by default, and everything if debug is enabled.
+    Setup for logger.
+    Logging levels:
+    info = default, show everything above INFO level
+    debug = log everything
+    quiet = only print errors
     """
+
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG if debug else logging.ERROR)
+
+    logging_levels = {
+        'info': logging.INFO,
+        'debug': logging.DEBUG,
+        'quiet': logging.ERROR
+    }
+
+    log_level = logging_levels.get(level, logging.INFO)
+    logger.setLevel(log_level)
 
     # Format of logs and date
     log_format = "%(asctime)s - %(levelname)s - %(message)s"
@@ -137,7 +168,7 @@ def log_setup(debug: bool):
     # Handler for console logging
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
-    console_handler.setLevel(logging.DEBUG if debug else logging.ERROR)
+    console_handler.setLevel(log_level)
 
     # Add the handler if logger is empty (no handlers added already)
     if not logger.hasHandlers():
@@ -146,25 +177,25 @@ def log_setup(debug: bool):
 def safe_parse_json(raw_data: str) -> Optional[Dict]:
     """
     Safely parse JSON data with error handling.
-    
+
     Args:
         raw_data (str): Raw JSON string to parse.
-        
+
     Returns:
         Optional[Dict]: Parsed JSON data as a dictionary or None if parsing fails.
     """
     if not raw_data or not isinstance(raw_data, str):
         return None
-    
+
     # Try to clean up the data before parsing
     cleaned_data = raw_data.strip()
-    
+
     try:
         # Handle both JSON formats: with single quotes and with double quotes
         if cleaned_data.startswith("'") or cleaned_data.startswith("{"):
             # Replace single quotes with double quotes for JSON parsing
             cleaned_data = cleaned_data.replace("'", "\"")
-        
+
         # Try to parse the cleaned data
         return orjson.loads(cleaned_data)
     except orjson.JSONDecodeError:
@@ -177,24 +208,24 @@ def safe_parse_json(raw_data: str) -> Optional[Dict]:
 def is_valid_timestamp(timestamp: Any) -> bool:
     """
     Check if a timestamp is valid.
-    
+
     Args:
         timestamp: The timestamp value to check.
-        
+
     Returns:
         bool: True if the timestamp is valid, False otherwise.
     """
     if timestamp is None:
         return False
-    
+
     if not isinstance(timestamp, (int, float)):
         return False
-    
+
     # Check if timestamp is within a reasonable range
     # Unix timestamp should be positive and not too far in the future
     if timestamp <= 0 or timestamp > 9999999999:  # Approx year 2286
         return False
-    
+
     return True
 
 def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> List[Dict]:
@@ -212,7 +243,7 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
     filtered_data = []
     total_entries = len(data)
     skipped_entries = 0
-    
+
     # Convert ecu_name to lowercase for case-insensitive matching if provided
     ecu_filters = [name.lower() for name in ecu_name] if ecu_name else None
 
@@ -220,11 +251,11 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
         # Skip entries with invalid timestamp
         timestamp = entry.get("timestamp")
         if not is_valid_timestamp(timestamp):
-            logging.debug("Skipping entry with invalid timestamp: %s", 
+            logging.debug("Skipping entry with invalid timestamp: %s",
                          str(entry)[:50] + "..." if len(str(entry)) > 50 else str(entry))
             skipped_entries += 1
             continue
-        
+
         # Skip entries that don't match the ECU filter (if provided)
         if ecu_filters and entry.get("name", "").lower() not in ecu_filters:
             continue
@@ -239,14 +270,14 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
         # Parse the data field
         parsed_data = safe_parse_json(raw_data)
         if not parsed_data:
-            logging.debug("Skipping entry with invalid data format: %s", 
+            logging.debug("Skipping entry with invalid data format: %s",
                          raw_data[:50] + "..." if len(raw_data) > 50 else raw_data)
             skipped_entries += 1
             continue
 
         # Skip entries with non-numeric values
         if any(not isinstance(v, (int, float)) for v in parsed_data.values()):
-            logging.debug("Skipping entry with non-numeric values: %s", 
+            logging.debug("Skipping entry with non-numeric values: %s",
                          str(parsed_data)[:50] + "..." if len(str(parsed_data)) > 50 else str(parsed_data))
             skipped_entries += 1
             continue
@@ -269,7 +300,7 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
             continue
 
     if skipped_entries > 0:
-        logging.info("Skipped %d out of %d entries due to invalid data", 
+        logging.info("Skipped %d out of %d entries due to invalid data",
                      skipped_entries, total_entries)
 
     return filtered_data
@@ -297,12 +328,12 @@ def create_windows(
     # Convert list of dicts to DataFrame and sort chronologically
     try:
         df = pd.DataFrame(data)
-        
+
         # Validate timestamp column exists
         if "timestamp" not in df.columns:
             logging.error("No timestamp column found in data")
             return pd.DataFrame()
-            
+
         df = df.sort_values("timestamp")
     except Exception as e:
         logging.error("Error creating DataFrame: %s", e)
@@ -313,7 +344,7 @@ def create_windows(
         step = window_length
 
     results = []
-    
+
     # Get time range of data
     try:
         min_time = df["timestamp"].min()
@@ -346,7 +377,7 @@ def create_windows(
 
                 # Calculate statistics for numeric columns
                 stats = window_df[numeric_columns].agg(["min", "max", "mean", "std"]).to_dict()
-                
+
                 # Flatten stats dict into format: stat_column: value
                 flat_stats = {f"{stat}_{key}": value
                               for key, values in stats.items()
@@ -363,7 +394,7 @@ def create_windows(
                 window_index += 1
         except Exception as e:
             logging.error("Error processing window at %f: %s", start_time, e)
-            
+
         # Move window forward by step size
         start_time += step
 
@@ -430,7 +461,7 @@ def dict_to_json(data: List[Dict], json_filename: str):
     if not data:
         logging.error("No data to convert to JSON")
         return
-        
+
     # Ensure filename ends with .json
     if not json_filename.endswith(".json"):
         json_filename += ".json"
@@ -485,7 +516,7 @@ def process_json_data(
 
     # Convert DataFrame to list of dictionaries
     results_list = results_df.to_dict('records')
-    
+
     # Save to JSON
     dict_to_json(results_list, json_filename)
 
@@ -494,7 +525,7 @@ def get_available_output_options() -> List[str]:
     Returns a list of available output options.
     This function is used to provide a list of available output options
     in error messages. Add new output options here when they are implemented.
-    
+
     Returns:
         List[str]: List of available output option flags.
     """
@@ -504,10 +535,10 @@ def get_available_output_options() -> List[str]:
 def check_output_options(args: argparse.Namespace) -> bool:
     """
     Checks if any output option is specified in the arguments.
-    
+
     Args:
         args: Parsed command line arguments.
-        
+
     Returns:
         bool: True if any output option is specified, False otherwise.
     """
@@ -520,14 +551,19 @@ def main():
         Entrypoint
     """
     argparser, args = handle_args()
-    log_setup(args.debug)
+    if args.quiet:
+        log_setup('quiet')
+    elif args.debug:
+        log_setup('debug')
+    else:
+        log_setup('info')
 
     try:
         data = read_file(args.file)
         if data is None:
             logging.error("Failed to read or parse the input file.")
             return
-            
+
         ecu_filter = args.ecu
         if ecu_filter:
             ecu_filter = [name.lower() for name in ecu_filter]
@@ -552,10 +588,10 @@ def main():
                 # Display error message
                 print(f"Error: No output format specified. Please use one of the following options: {formatted_options}")
                 return
-                
+
             if args.output_csv:
                 dict_to_csv(data, args.length, args.output_csv, args.step, ecu_filter)
-            elif args.output_json:
+            if args.output_json:
                 process_json_data(data, args.length, args.output_json, args.step, ecu_filter)
         else:
             argparser.print_help()
