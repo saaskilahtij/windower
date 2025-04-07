@@ -275,33 +275,25 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
             skipped_entries += 1
             continue
 
-        # Skip entries with non-numeric values
-        if any(not isinstance(v, (int, float)) for v in parsed_data.values()):
-            logging.debug("Skipping entry with non-numeric values: %s",
-                         str(parsed_data)[:50] + "..." if len(str(parsed_data)) > 50 else str(parsed_data))
+        # Filter non-numeric values, keep only numeric values
+        numeric_values = {
+            k: float(v)
+            for k, v in parsed_data.items()
+            if isinstance(v,(int, float))
+        }
+        # Skip if nothing numeric
+        if not numeric_values:
+            logging.debug("Skipping entry with no numeric values: %s",
+                 str(parsed_data)[:50] + "..." if len(str(parsed_data)) > 50 else str(parsed_data))
             skipped_entries += 1
             continue
 
-        # Convert values to float
-        try:
-            numeric_values = {
-                k: float(v) if isinstance(v, (int, float)) else 0.0
-                for k, v in parsed_data.items()
-            }
+        # Add numeric values to filtered data
+        filtered_data.append({
+            "timestamp": float(timestamp),
+            **numeric_values
+        })
 
-            # Add entry to filtered data
-            filtered_data.append({
-                "timestamp": float(timestamp),
-                **numeric_values
-            })
-        except (ValueError, TypeError) as e:
-            logging.debug("Error converting values to numeric: %s", e)
-            skipped_entries += 1
-            continue
-
-    if skipped_entries > 0:
-        logging.info("Skipped %d out of %d entries due to invalid data",
-                     skipped_entries, total_entries)
 
     return filtered_data
 
