@@ -6,8 +6,7 @@ Description: This file contains the windower unit tests
 
 import unittest
 from unittest.mock import patch
-#from unittest.mock import patch, Mock
-import sys
+import argparse
 import windower
 
 class TestWindower(unittest.TestCase):
@@ -53,6 +52,20 @@ class TestWindower(unittest.TestCase):
         ]
         _mock_read.return_value = test_data
         mock_load.return_value = ["BRAKE", "SPEED"]
+
+    def test_parse_ecu_names(self):
+        '''ests ECU name extraction from JSON data'''
+        test_data = [
+            {"name": "ECU1"},
+            {"name": "ECU2"},
+            {"name": "ECU1"},
+            {"name": "ECU3"},
+            {"name": "ECU2"}
+        ]
+        expected_result = ["ECU1", "ECU2", "ECU3"]
+
+        result = windower.parse_ecu_names(test_data)
+        self.assertEqual(sorted(result), sorted(expected_result))
 
     def test_clean_data_removes_unknowns(self):
         """
@@ -133,6 +146,38 @@ class TestWindower(unittest.TestCase):
         ]
         output = windower.filter_and_process_data(input_data)
         self.assertEqual(output, expected_output)
+
+    def test_is_valid_timestamp(self):
+        """Test that the timestamp is valid  """
+        test_data = [
+            (1717678139, True),
+            (1717678139.6661446, True),
+            (None, False),
+            (-1717678139.6661446, False),
+            (0, False),
+            (10000000000, False),
+            (9999999999, True)
+        ]
+        for timestamp, expected in test_data:
+            self.assertEqual(windower.is_valid_timestamp(timestamp), expected)
+
+    def test_get_available_output_options(self):
+        '''Test that the function returns the correct list of available output options'''
+        result = windower.get_available_output_options()
+
+        expected_result = ["-csv", "--output-csv", "-json", "--output-json"]
+
+        self.assertEqual(result, expected_result)
+
+    @patch("sys.argv", ["windower", "-f", "testfile.json", "--output-csv", "myoutput.csv"])
+    def test_handle_args_parses_correctly(self):
+        '''Tests that the handle_args function correctly parses command-line arguments.'''
+        parser, args = windower.handle_args()
+        self.assertIsInstance(parser, argparse.ArgumentParser)
+
+        self.assertEqual(args.file, "testfile.json")
+        self.assertEqual(args.output_csv, "myoutput.csv")
+        self.assertIsNone(args.output_json)
 
 if __name__ == '__main__':
     unittest.main()
