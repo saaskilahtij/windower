@@ -5,8 +5,10 @@ Description: This file contains the windower unit tests
 """
 
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 import argparse
+import orjson
+import pandas as pd
 import windower
 
 class TestWindower(unittest.TestCase):
@@ -54,7 +56,7 @@ class TestWindower(unittest.TestCase):
         mock_load.return_value = ["BRAKE", "SPEED"]
 
     def test_parse_ecu_names(self):
-        '''ests ECU name extraction from JSON data'''
+        '''Tests fuction pars from JSON data'''
         test_data = [
             {"name": "ECU1"},
             {"name": "ECU2"},
@@ -148,7 +150,7 @@ class TestWindower(unittest.TestCase):
         self.assertEqual(output, expected_output)
 
     def test_is_valid_timestamp(self):
-        """Test that the timestamp is valid  """
+        """Test that timestamp_is_valid function correctly identifies valid timestamps """
         test_data = [
             (1717678139, True),
             (1717678139.6661446, True),
@@ -178,6 +180,55 @@ class TestWindower(unittest.TestCase):
         self.assertEqual(args.file, "testfile.json")
         self.assertEqual(args.output_csv, "myoutput.csv")
         self.assertIsNone(args.output_json)
+
+    @patch("windower.create_windows", return_value=pd.DataFrame(
+            [{'timestamp': 1717678137, 'value': 10}]))
+    @patch("windower.filter_and_process_data", return_value=[
+        {"name": "BRAKE", "timestamp": 1717678137, "BRAKE_AMOUNT": 39.0}])
+    @patch("windower.pd.DataFrame.to_csv")
+    def test_dict_to_csv(self, mock_to_csv, mock_filter_process, mock_create_windows):
+        '''Test that the dict_to_csv function correctly processes JSON data, creates windows,
+        and saves the results to a CSV file
+        Test uses hardcoded values to avoid real data processing or file writing'''
+        test_data = [
+            {"name": "BRAKE", "timestamp": 1717678137.3455644, "BRAKE_AMOUNT": 39.0},
+            {"name": "SPEED", "timestamp": 1717678137.6916034, "SPEED": 20.2}
+        ]
+        window_length = 10.0
+        csv_filename = "output.csv"
+        windower.dict_to_csv(test_data, window_length, csv_filename)
+        mock_filter_process.assert_called_once_with(test_data, None)
+        mock_create_windows.assert_called_once()
+        mock_to_csv.assert_called_once_with(
+            csv_filename, sep=";", index=False, encoding="utf-8-sig")
+
+        args, _ = mock_to_csv.call_args
+        self.assertEqual(args[0], csv_filename)
+
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("windower.logging")
+    def test_dict_to_json(self, mock_logging, mock_open_function):
+        '''Test that dict_to_json correctly converts the data to JSON format and saves it to a file.
+        The test uses hardcoded values to avoid actual file writing or data processing'''
+
+        test_data = [
+            {"name": "BRAKE", "timestamp": 1717678137.3455644, "BRAKE_AMOUNT": 39.0},
+            {"name": "SPEED", "timestamp": 1717678137.6916034, "SPEED": 20.2}
+        ]
+        json_filename = "output.json"
+
+        windower.dict_to_json(test_data, json_filename)
+
+        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8")
+
+        handle = mock_open_function()
+        handle.write.assert_called_once()
+
+        written_data = handle.write.call_args[0][0]
+        parsed_data = orjson.loads(written_data)
+        self.assertEqual(parsed_data, test_data)
+        mock_logging.info.assert_called_once_with("%s saved successfully", json_filename)
+
 
 if __name__ == '__main__':
     unittest.main()
