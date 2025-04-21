@@ -72,11 +72,13 @@ def parse_ecu_names(data: List[Dict]) -> list:
     logging.debug("ECU names extracted")
     return list(ecu_names)
 
-def read_file(file_name: str) -> Optional[List[Dict]]:
+def read_file(file_name: str, buffered: bool = False, buffer_size: int = 1000) -> Optional[List[Dict]]:
     """
     This function reads a JSON file and converts it into a Python object using orjson.
     Args:
         file_name (str): Path to the JSON file.
+        buffered (bool): Whether to use buffered reading (default: False).
+        buffer_size (int): Number of entries to buffer before processing (default: 1000).
     Returns:
         Optional[List[Dict]]: Parsed JSON data as a Python object or None if an error occurs.
     Note:
@@ -86,13 +88,41 @@ def read_file(file_name: str) -> Optional[List[Dict]]:
     """
     logging.info("Reading JSON file: %s", file_name)
     try:
-        with open(file_name, "r", encoding="utf-8") as file:
-            data = orjson.loads(file.read())
-            logging.debug("%s read successfully!", file_name)
-            logging.debug("Cleaning data...")
-            cleaned_data = clean_data(data)
-            logging.debug("Data cleaned!")
-            return cleaned_data
+        if buffered:
+            logging.info("Using buffered reading with buffer size: %d", buffer_size)
+            
+            # Open the file for reading
+            with open(file_name, "r", encoding="utf-8") as file:
+                # Read the entire file content
+                file_content = file.read()
+                
+                # Parse the JSON data
+                data = orjson.loads(file_content)
+                
+                # Process data in chunks
+                all_cleaned_data = []
+                for i in range(0, len(data), buffer_size):
+                    chunk = data[i:i+buffer_size]
+                    cleaned_chunk = clean_data(chunk)
+                    all_cleaned_data.extend(cleaned_chunk)
+                    
+                    logging.debug("Processed %d entries from %s", len(chunk), file_name)
+                    
+                    # Clear the chunk from memory
+                    del chunk
+                    del cleaned_chunk
+                
+                logging.debug("%s read successfully with buffered reading!", file_name)
+                return all_cleaned_data
+        else:
+            # Non-buffered reading (original behavior)
+            with open(file_name, "r", encoding="utf-8") as file:
+                data = orjson.loads(file.read())
+                logging.debug("%s read successfully!", file_name)
+                logging.debug("Cleaning data...")
+                cleaned_data = clean_data(data)
+                logging.debug("Data cleaned!")
+                return cleaned_data
     except FileNotFoundError:
         logging.error("Error: The file '%s' was not found.", file_name)
     except orjson.JSONDecodeError as e:
@@ -462,7 +492,7 @@ def dict_to_csv(
                 header = ";".join(results_df.columns) + "\n"
                 f.write(header)
                 
-                # Write data in chunks
+                # Process and write data in chunks
                 for i in range(0, len(results_df), buffer_size):
                     chunk = results_df.iloc[i:i+buffer_size]
                     chunk_str = chunk.to_csv(sep=";", index=False, header=False)
@@ -471,6 +501,10 @@ def dict_to_csv(
                     
                     if i + buffer_size < len(results_df):
                         logging.debug("Flushed %d entries to %s", min(buffer_size, len(results_df) - i), csv_filename)
+                    
+                    # Clear the chunk from memory
+                    del chunk
+                    del chunk_str
             
             logging.info("CSV file saved with buffered writing: %s", csv_filename)
         else:
@@ -543,7 +577,7 @@ def dict_to_json(
                 # Write opening bracket
                 f.write("[\n")
                 
-                # Write data in chunks
+                # Process and write data in chunks
                 for i in range(0, len(data), buffer_size):
                     chunk = data[i:i+buffer_size]
                     chunk_json = orjson.dumps(chunk, option=orjson.OPT_INDENT_2 | orjson.OPT_NON_STR_KEYS).decode("utf-8")
@@ -560,6 +594,10 @@ def dict_to_json(
                     
                     if i + buffer_size < len(data):
                         logging.debug("Flushed %d entries to %s", min(buffer_size, len(data) - i), json_filename)
+                    
+                    # Clear the chunk from memory
+                    del chunk
+                    del chunk_json
                 
                 # Write closing bracket
                 f.write("\n]")
@@ -674,7 +712,25 @@ def watch_file(
                         # Try to parse as a complete JSON array
                         new_json_data = orjson.loads(new_data)
                         if isinstance(new_json_data, list):
-                            accumulated_data.extend(new_json_data)
+                            # Process data in chunks if buffered reading is enabled
+                            if buffered:
+                                for i in range(0, len(new_json_data), buffer_size):
+                                    chunk = new_json_data[i:i+buffer_size]
+                                    accumulated_data.extend(chunk)
+                                    
+                                    # Process accumulated data if we have enough
+                                    if len(accumulated_data) >= buffer_size:
+                                        process_and_save_data(
+                                            accumulated_data, window_length, step, 
+                                            output_csv, output_json, ecu_filter, 
+                                            buffered, buffer_size
+                                        )
+                                        accumulated_data = []
+                                    
+                                    # Clear the chunk from memory
+                                    del chunk
+                            else:
+                                accumulated_data.extend(new_json_data)
                         else:
                             logging.warning("New data is not a JSON array, skipping")
                     except orjson.JSONDecodeError:
@@ -687,6 +743,15 @@ def watch_file(
                                     try:
                                         obj = orjson.loads(line)
                                         accumulated_data.append(obj)
+                                        
+                                        # Process accumulated data if we have enough
+                                        if buffered and len(accumulated_data) >= buffer_size:
+                                            process_and_save_data(
+                                                accumulated_data, window_length, step, 
+                                                output_csv, output_json, ecu_filter, 
+                                                buffered, buffer_size
+                                            )
+                                            accumulated_data = []
                                     except orjson.JSONDecodeError:
                                         logging.warning("Invalid JSON line: %s", line[:50] + "..." if len(line) > 50 else line)
                         except Exception as e:
@@ -697,39 +762,11 @@ def watch_file(
                 # Process accumulated data if we have enough
                 current_time = time.time()
                 if accumulated_data and (current_time - last_processed_time) >= window_length:
-                    logging.info("Processing %d accumulated entries", len(accumulated_data))
-                    
-                    # Filter and process the data
-                    filtered_data = filter_and_process_data(accumulated_data, ecu_filter)
-                    
-                    if filtered_data:
-                        # Create windows and calculate statistics
-                        results_df = create_windows(filtered_data, window_length, step)
-                        
-                        if not results_df.empty:
-                            # Convert DataFrame to list of dictionaries
-                            results_list = results_df.to_dict('records')
-                            
-                            # Save to output files with timestamp
-                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            
-                            if output_csv:
-                                csv_filename = f"{output_csv}_{timestamp}.csv"
-                                # Use the existing dict_to_csv function
-                                dict_to_csv(filtered_data, window_length, csv_filename, step, ecu_filter, buffered, buffer_size)
-                            
-                            if output_json:
-                                json_filename = f"{output_json}_{timestamp}.json"
-                                # Use the existing dict_to_json function
-                                dict_to_json(results_list, json_filename, window_length, step, ecu_filter, buffered, buffer_size)
-                            
-                            logging.info("Processed and saved %d entries", len(accumulated_data))
-                        else:
-                            logging.warning("No data found in specified windows")
-                    else:
-                        logging.warning("No valid entries to process after filtering")
-                    
-                    # Clear accumulated data
+                    process_and_save_data(
+                        accumulated_data, window_length, step, 
+                        output_csv, output_json, ecu_filter, 
+                        buffered, buffer_size
+                    )
                     accumulated_data = []
                     last_processed_time = current_time
             
@@ -740,6 +777,104 @@ def watch_file(
         logging.info("Watch stopped by user")
     except Exception as e:
         logging.critical("Unexpected error in watch mode: %s", e, exc_info=True)
+
+def process_and_save_data(
+        data: List[Dict],
+        window_length: float,
+        step: float,
+        output_csv: Optional[str],
+        output_json: Optional[str],
+        ecu_filter: Optional[List[str]],
+        buffered: bool,
+        buffer_size: int):
+    """
+    Process accumulated data and save to output files.
+    
+    Args:
+        data: List of dictionaries containing the data.
+        window_length: Length of each window in seconds.
+        step: How many seconds the window moves forward.
+        output_csv: Output CSV filename (optional).
+        output_json: Output JSON filename (optional).
+        ecu_filter: Filter data by specific ECU name(s) (optional).
+        buffered: Whether to use buffered writing (default: False).
+        buffer_size: Number of entries to buffer before flushing (default: 1000).
+    """
+    logging.info("Processing %d accumulated entries", len(data))
+    
+    # Filter and process the data
+    filtered_data = filter_and_process_data(data, ecu_filter)
+    
+    if filtered_data:
+        # Create windows and calculate statistics
+        results_df = create_windows(filtered_data, window_length, step)
+        
+        if not results_df.empty:
+            # Convert DataFrame to list of dictionaries
+            results_list = results_df.to_dict('records')
+            
+            # Save to output files with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            if output_csv:
+                csv_filename = f"{output_csv}_{timestamp}.csv"
+                # Use the existing dict_to_csv function
+                dict_to_csv(filtered_data, window_length, csv_filename, step, ecu_filter, buffered, buffer_size)
+            
+            if output_json:
+                json_filename = f"{output_json}_{timestamp}.json"
+                # Use the existing dict_to_json function
+                dict_to_json(results_list, json_filename, window_length, step, ecu_filter, buffered, buffer_size)
+            
+            logging.info("Processed and saved %d entries", len(data))
+        else:
+            logging.warning("No data found in specified windows")
+    else:
+        logging.warning("No valid entries to process after filtering")
+
+def read_csv_file(file_name: str, buffered: bool = False, buffer_size: int = 1000) -> Optional[pd.DataFrame]:
+    """
+    This function reads a CSV file and converts it into a pandas DataFrame.
+    
+    Args:
+        file_name (str): Path to the CSV file.
+        buffered (bool): Whether to use buffered reading (default: False).
+        buffer_size (int): Number of rows to buffer before processing (default: 1000).
+        
+    Returns:
+        Optional[pd.DataFrame]: Parsed CSV data as a pandas DataFrame or None if an error occurs.
+    """
+    logging.info("Reading CSV file: %s", file_name)
+    try:
+        if buffered:
+            logging.info("Using buffered reading with buffer size: %d", buffer_size)
+            
+            # Read the CSV file in chunks
+            chunks = []
+            for chunk in pd.read_csv(file_name, sep=";", chunksize=buffer_size):
+                chunks.append(chunk)
+                logging.debug("Read %d rows from %s", len(chunk), file_name)
+            
+            # Combine all chunks into a single DataFrame
+            if chunks:
+                result_df = pd.concat(chunks, ignore_index=True)
+                logging.debug("%s read successfully with buffered reading!", file_name)
+                return result_df
+            else:
+                logging.warning("No data found in CSV file: %s", file_name)
+                return pd.DataFrame()
+        else:
+            # Non-buffered reading (original behavior)
+            result_df = pd.read_csv(file_name, sep=";")
+            logging.debug("%s read successfully!", file_name)
+            return result_df
+    except FileNotFoundError:
+        logging.error("Error: The file '%s' was not found.", file_name)
+    except pd.errors.EmptyDataError:
+        logging.error("Error: The file '%s' is empty.", file_name)
+    except Exception as e:
+        logging.error("Unexpected error reading CSV file '%s': %s", file_name, e)
+    return None
 
 def main():
     """
@@ -756,6 +891,7 @@ def main():
         if other_args:
             argparser.error("-list / --list-ecus can be only used with file and logging argument, no other arguments")
     
+    # Set logging configuration (default info)
     if args.quiet:
         log_setup('quiet')
     elif args.debug:
@@ -799,10 +935,20 @@ def main():
             return
         
         # Normal mode (not watching)
-        data = read_file(args.file)
-        if data is None:
-            logging.error("Failed to read or parse the input file.")
-            return
+        # Check if the file is a CSV file
+        if args.file.lower().endswith('.csv'):
+            data = read_csv_file(args.file, args.buffered, args.buffer_size)
+            if data is None:
+                logging.error("Failed to read or parse the input CSV file.")
+                return
+            # Convert DataFrame to list of dictionaries
+            data = data.to_dict('records')
+        else:
+            # Assume it's a JSON file
+            data = read_file(args.file, args.buffered, args.buffer_size)
+            if data is None:
+                logging.error("Failed to read or parse the input file.")
+                return
 
         ecu_filter = args.ecu
         if ecu_filter:

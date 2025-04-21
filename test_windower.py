@@ -388,5 +388,84 @@ class TestWindower(unittest.TestCase):
             "test.json", 10.0, 5.0, "output.csv", None, None, False, 1000, 1.0
         )
 
+    @patch("windower.read_file")
+    def test_read_file_buffered(self, mock_read_file):
+        '''Test that read_file correctly handles buffered reading when the buffered flag is set.'''
+        
+        # Mock the read_file function to return a large dataset
+        test_data = [
+            {"name": f"ECU{i}", "timestamp": 1717678137.3455644 + i, "value": i}
+            for i in range(2500)  # More than the default buffer size of 1000
+        ]
+        mock_read_file.return_value = test_data
+        
+        # Call with buffered=True
+        result = windower.read_file("test.json", buffered=True, buffer_size=1000)
+        
+        # Verify that read_file was called with the correct arguments
+        mock_read_file.assert_called_once_with("test.json", buffered=True, buffer_size=1000)
+        
+        # Verify that the result is correct
+        self.assertEqual(result, test_data)
+
+    @patch("windower.pd.read_csv")
+    @patch("windower.pd.concat")
+    @patch("windower.logging")
+    def test_read_csv_file_buffered(self, mock_logging, mock_concat, mock_read_csv):
+        '''Test that read_csv_file correctly handles buffered reading when the buffered flag is set.'''
+        
+        # Mock the read_csv function to return chunks
+        chunk1 = pd.DataFrame({'col1': [1, 2, 3], 'col2': [4, 5, 6]})
+        chunk2 = pd.DataFrame({'col1': [7, 8, 9], 'col2': [10, 11, 12]})
+        mock_read_csv.return_value = [chunk1, chunk2]
+        
+        # Mock the concat function to return a combined DataFrame
+        combined_df = pd.DataFrame({
+            'col1': [1, 2, 3, 7, 8, 9],
+            'col2': [4, 5, 6, 10, 11, 12]
+        })
+        mock_concat.return_value = combined_df
+        
+        # Call with buffered=True
+        result = windower.read_csv_file("test.csv", buffered=True, buffer_size=3)
+        
+        # Verify that read_csv was called with the correct arguments
+        mock_read_csv.assert_called_once_with("test.csv", sep=";", chunksize=3)
+        
+        # Verify that concat was called with the correct arguments
+        mock_concat.assert_called_once_with([chunk1, chunk2], ignore_index=True)
+        
+        # Verify that the result is correct
+        self.assertEqual(result.equals(combined_df), True)
+        
+        # Verify logging messages
+        mock_logging.info.assert_any_call("Reading CSV file: %s", "test.csv")
+        mock_logging.info.assert_any_call("Using buffered reading with buffer size: %d", 3)
+        mock_logging.debug.assert_any_call("Read %d rows from %s", 3, "test.csv")
+        mock_logging.debug.assert_any_call("Read %d rows from %s", 3, "test.csv")
+        mock_logging.debug.assert_any_call("%s read successfully with buffered reading!", "test.csv")
+
+    @patch("windower.pd.read_csv")
+    @patch("windower.logging")
+    def test_read_csv_file_non_buffered(self, mock_logging, mock_read_csv):
+        '''Test that read_csv_file correctly handles non-buffered reading.'''
+        
+        # Mock the read_csv function to return a DataFrame
+        test_df = pd.DataFrame({'col1': [1, 2, 3], 'col2': [4, 5, 6]})
+        mock_read_csv.return_value = test_df
+        
+        # Call with buffered=False (default)
+        result = windower.read_csv_file("test.csv")
+        
+        # Verify that read_csv was called with the correct arguments
+        mock_read_csv.assert_called_once_with("test.csv", sep=";")
+        
+        # Verify that the result is correct
+        self.assertEqual(result.equals(test_df), True)
+        
+        # Verify logging messages
+        mock_logging.info.assert_any_call("Reading CSV file: %s", "test.csv")
+        mock_logging.debug.assert_any_call("%s read successfully!", "test.csv")
+
 if __name__ == '__main__':
     unittest.main()
