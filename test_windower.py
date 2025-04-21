@@ -181,30 +181,6 @@ class TestWindower(unittest.TestCase):
         self.assertEqual(args.output_csv, "myoutput.csv")
         self.assertIsNone(args.output_json)
 
-    @patch("windower.create_windows", return_value=pd.DataFrame(
-            [{'timestamp': 1717678137, 'value': 10}]))
-    @patch("windower.filter_and_process_data", return_value=[
-        {"name": "BRAKE", "timestamp": 1717678137, "BRAKE_AMOUNT": 39.0}])
-    @patch("windower.pd.DataFrame.to_csv")
-    def test_dict_to_csv(self, mock_to_csv, mock_filter_process, mock_create_windows):
-        '''Test that the dict_to_csv function correctly processes JSON data, creates windows,
-        and saves the results to a CSV file
-        Test uses hardcoded values to avoid real data processing or file writing'''
-        test_data = [
-            {"name": "BRAKE", "timestamp": 1717678137.3455644, "BRAKE_AMOUNT": 39.0},
-            {"name": "SPEED", "timestamp": 1717678137.6916034, "SPEED": 20.2}
-        ]
-        window_length = 10.0
-        csv_filename = "output.csv"
-        windower.dict_to_csv(test_data, window_length, csv_filename)
-        mock_filter_process.assert_called_once_with(test_data, None)
-        mock_create_windows.assert_called_once()
-        mock_to_csv.assert_called_once_with(
-            csv_filename, sep=";", index=False, encoding="utf-8-sig")
-
-        args, _ = mock_to_csv.call_args
-        self.assertEqual(args[0], csv_filename)
-
     @patch("builtins.open", new_callable=mock_open)
     @patch("windower.logging")
     def test_dict_to_json(self, mock_logging, mock_open_function):
@@ -229,6 +205,188 @@ class TestWindower(unittest.TestCase):
         self.assertEqual(parsed_data, test_data)
         mock_logging.info.assert_called_once_with("%s saved successfully", json_filename)
 
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("windower.logging")
+    def test_dict_to_json_buffered(self, mock_logging, mock_open_function):
+        '''Test that dict_to_json correctly handles buffered writing when the buffered flag is set.
+        The test verifies that the file is opened correctly and that the data is written in chunks.'''
+        
+        # Create a larger dataset to test buffering
+        test_data = [
+            {"name": f"ECU{i}", "timestamp": 1717678137.3455644 + i, "value": i}
+            for i in range(2500)  # More than the default buffer size of 1000
+        ]
+        json_filename = "output.json"
+        
+        # Call with buffered=True
+        windower.dict_to_json(test_data, json_filename, buffered=True, buffer_size=1000)
+        
+        # Verify file was opened correctly
+        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8")
+        
+        # Get the file handle
+        handle = mock_open_function()
+        
+        # Verify that write was called multiple times (at least 3 times: opening bracket, data chunks, closing bracket)
+        self.assertGreaterEqual(handle.write.call_count, 3)
+        
+        # Verify that flush was called after each chunk
+        self.assertGreaterEqual(handle.flush.call_count, 2)  # At least 2 flushes for 2500 items with buffer size 1000
+        
+        # Verify logging messages
+        mock_logging.info.assert_any_call("Using buffered writing with buffer size: %d", 1000)
+        mock_logging.info.assert_any_call("JSON file saved with buffered writing: %s", json_filename)
+        
+        # Verify debug messages for flushing
+        self.assertGreaterEqual(
+            sum(1 for call in mock_logging.debug.call_args_list if "Flushed" in str(call)), 
+            2
+        )
+
+    @patch("windower.create_windows", return_value=pd.DataFrame(
+            [{'timestamp': 1717678137, 'value': 10}]))
+    @patch("windower.filter_and_process_data", return_value=[
+        {"name": "BRAKE", "timestamp": 1717678137, "BRAKE_AMOUNT": 39.0}])
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("windower.logging")
+    def test_dict_to_json_with_processing(self, mock_logging, mock_open_function, mock_filter_process, mock_create_windows):
+        '''Test that dict_to_json correctly processes data when window_length is provided'''
+        
+        test_data = [
+            {"name": "BRAKE", "timestamp": 1717678137.3455644, "BRAKE_AMOUNT": 39.0},
+            {"name": "SPEED", "timestamp": 1717678137.6916034, "SPEED": 20.2}
+        ]
+        window_length = 10.0
+        json_filename = "output.json"
+        
+        # Mock the DataFrame to return a processed result
+        mock_df = pd.DataFrame({
+            'timestamp': [1717678137],
+            'value': [10]
+        })
+        mock_create_windows.return_value = mock_df
+        
+        # Call with window_length
+        windower.dict_to_json(test_data, json_filename, window_length=window_length)
+        
+        # Verify that filter_and_process_data was called
+        mock_filter_process.assert_called_once_with(test_data, None)
+        
+        # Verify that create_windows was called
+        mock_create_windows.assert_called_once()
+        
+        # Verify that the file was opened correctly
+        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8")
+        
+        # Verify that write was called
+        handle = mock_open_function()
+        handle.write.assert_called()
+        
+        # Verify logging messages
+        mock_logging.info.assert_any_call("%s saved successfully", json_filename)
+
+    @patch("windower.create_windows", return_value=pd.DataFrame(
+            [{'timestamp': 1717678137, 'value': 10}]))
+    @patch("windower.filter_and_process_data", return_value=[
+        {"name": "BRAKE", "timestamp": 1717678137, "BRAKE_AMOUNT": 39.0}])
+    @patch("windower.pd.DataFrame.to_csv")
+    def test_dict_to_csv(self, mock_to_csv, mock_filter_process, mock_create_windows):
+        '''Test that the dict_to_csv function correctly processes JSON data, creates windows,
+        and saves the results to a CSV file
+        '''
+        test_data = [
+            {"name": "BRAKE", "timestamp": 1717678137.3455644, "BRAKE_AMOUNT": 39.0},
+            {"name": "SPEED", "timestamp": 1717678137.6916034, "SPEED": 20.2}
+        ]
+        window_length = 10.0
+        csv_filename = "output.csv"
+        windower.dict_to_csv(test_data, window_length, csv_filename)
+        mock_filter_process.assert_called_once_with(test_data, None)
+        mock_create_windows.assert_called_once()
+        mock_to_csv.assert_called_once_with(
+            csv_filename, sep=";", index=False, encoding="utf-8-sig")
+
+        args, _ = mock_to_csv.call_args
+        self.assertEqual(args[0], csv_filename)
+
+    @patch("windower.create_windows", return_value=pd.DataFrame(
+            [{'timestamp': 1717678137, 'value': 10}]))
+    @patch("windower.filter_and_process_data", return_value=[
+        {"name": "BRAKE", "timestamp": 1717678137, "BRAKE_AMOUNT": 39.0}])
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("windower.logging")
+    def test_dict_to_csv_buffered(self, mock_logging, mock_open_function, mock_filter_process, mock_create_windows):
+        '''Test that the dict_to_csv function correctly handles buffered writing when the buffered flag is set.
+        The test verifies that the file is opened correctly and that the data is written in chunks.'''
+        
+        # Create a larger dataset to test buffering
+        test_data = [
+            {"name": f"ECU{i}", "timestamp": 1717678137.3455644 + i, "value": i}
+            for i in range(2500)  # More than the default buffer size of 1000
+        ]
+        window_length = 10.0
+        csv_filename = "output.csv"
+        
+        # Mock the DataFrame to return a larger dataset
+        mock_df = pd.DataFrame({
+            'timestamp': [1717678137 + i for i in range(2500)],
+            'value': [i for i in range(2500)]
+        })
+        mock_create_windows.return_value = mock_df
+        
+        # Call with buffered=True
+        windower.dict_to_csv(test_data, window_length, csv_filename, buffered=True, buffer_size=1000)
+        
+        # Verify file was opened correctly
+        mock_open_function.assert_called_once_with(csv_filename, "w", encoding="utf-8-sig")
+        
+        # Get the file handle
+        handle = mock_open_function()
+        
+        # Verify that write was called multiple times (header + data chunks)
+        self.assertGreaterEqual(handle.write.call_count, 3)
+        
+        # Verify that flush was called after each chunk
+        self.assertGreaterEqual(handle.flush.call_count, 2)  # At least 2 flushes for 2500 items with buffer size 1000
+        
+        # Verify logging messages
+        mock_logging.info.assert_any_call("Using buffered writing with buffer size: %d", 1000)
+        mock_logging.info.assert_any_call("CSV file saved with buffered writing: %s", csv_filename)
+        
+        # Verify debug messages for flushing
+        self.assertGreaterEqual(
+            sum(1 for call in mock_logging.debug.call_args_list if "Flushed" in str(call)), 
+            2
+        )
+
+    @patch("windower.watch_file")
+    def test_main_watch_mode(self, mock_watch_file):
+        '''Test that the main function correctly calls watch_file when the watch flag is provided.'''
+        
+        # Mock the argument parser to return args with watch=True
+        mock_args = argparse.Namespace(
+            file="test.json",
+            length=10.0,
+            step=5.0,
+            output_csv="output.csv",
+            output_json=None,
+            ecu=None,
+            buffered=False,
+            buffer_size=1000,
+            watch=True,
+            watch_interval=1.0,
+            list_ecus=False,
+            quiet=False,
+            debug=False
+        )
+        
+        with patch("windower.handle_args", return_value=(None, mock_args)):
+            windower.main()
+            
+        # Verify that watch_file was called with the correct arguments
+        mock_watch_file.assert_called_once_with(
+            "test.json", 10.0, 5.0, "output.csv", None, None, False, 1000, 1.0
+        )
 
 if __name__ == '__main__':
     unittest.main()
