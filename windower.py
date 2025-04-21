@@ -58,7 +58,6 @@ def parse_ecu_names(data: List[Dict]) -> list:
         list: A list of ECU names found in the data.
     """
     logging.debug("Extracting ECU names from JSON data")
-    #logging.debug("Data: %s", data)
     ecu_names = set()
 
     for row in data:
@@ -130,15 +129,6 @@ def handle_args() -> tuple[argparse.ArgumentParser, argparse.Namespace]:
 
     args = parser.parse_args(args=None if sys.argv[1:] else ['--help'])
 
-    #-list/--list-ecus can only be used with file and optional logging level (only -f/--file, -list/--list-ecus and log loglevel)
-    if args.list_ecus:
-        other_args = any([
-            args.output_csv, args.output_json,
-            args.ecu, args.length, args.step
-        ])
-        if other_args:
-            parser.error("-list / --list-ecus can be only used with file and logging argument, no other arguments")
-
     return parser, args
 
 def log_setup(level: str):
@@ -167,7 +157,20 @@ def log_setup(level: str):
 
     # Handler for console logging
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+    
+    # Custom formatter to add symbols based on log level
+    class CustomFormatter(logging.Formatter):
+        def format(self, record):
+            # Add symbols based on log level
+            if record.levelno == logging.INFO:
+                record.msg = f"[*] {record.msg}"
+            elif record.levelno == logging.WARNING:
+                record.msg = f"[+] {record.msg}"
+            elif record.levelno >= logging.ERROR:
+                record.msg = f"[-] {record.msg}"
+            return super().format(record)
+    
+    console_handler.setFormatter(CustomFormatter(log_format, datefmt=date_format))
     console_handler.setLevel(log_level)
 
     # Add the handler if logger is empty (no handlers added already)
@@ -431,10 +434,6 @@ def dict_to_csv(
         logging.info("No data found in specified windows")
         return
 
-    # Ensure output filename has .csv extension
-    if not csv_filename.endswith(".csv"):
-        csv_filename += ".csv"
-
     try:
         # Write CSV using Pandas
         results_df.to_csv(csv_filename, sep=";", index=False, encoding="utf-8-sig")
@@ -496,14 +495,14 @@ def process_json_data(
     filtered_data = filter_and_process_data(data, ecu_name)
 
     if not filtered_data:
-        logging.debug("No valid entries to process after filtering")
+        logging.error("No valid entries to process after filtering")
         return
 
     # Create windows and calculate statistics
     results_df = create_windows(filtered_data, window_length, step)
 
     if results_df.empty:
-        logging.info("No data found in specified windows")
+        logging.error("No data found in specified windows")
         return
 
     # Convert DataFrame to list of dictionaries
@@ -543,6 +542,16 @@ def main():
         Entrypoint
     """
     argparser, args = handle_args()
+    
+    #-list/--list-ecus can only be used with file and optional logging level (only -f/--file, -list/--list-ecus and log loglevel)
+    if args.list_ecus:
+        other_args = any([
+            args.output_csv, args.output_json,
+            args.ecu, args.length, args.step
+        ])
+        if other_args:
+            argparser.error("-list / --list-ecus can be only used with file and logging argument, no other arguments")
+    
     if args.quiet:
         log_setup('quiet')
     elif args.debug:
