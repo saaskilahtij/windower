@@ -29,3 +29,7 @@ options:
 
 The tool comes along with unit tests provided by pytest, and with perftester benchmarking library.
 
+
+## Usage
+
+[See here in the usage document](./USAGE.md)
