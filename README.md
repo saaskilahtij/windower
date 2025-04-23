@@ -19,12 +19,6 @@ options:
   -l LENGTH, --length LENGTH
                         Window length in seconds
   -s STEP, --step STEP  How many seconds the window moves forward (default: same as window length)
-  -b, --buffered        Enable buffered writing for output files
-  --buffer-size BUFFER_SIZE
-                        Number of entries to buffer before flushing (default: 1000)
-  -w, --watch           Watch for updates to the input file and process them as they come in
-  --watch-interval WATCH_INTERVAL
-                        Interval in seconds to check for file updates (default: 1.0)
   -d, --debug           Enable DEBUG logging, default: INFO logging
   -q, --quiet           Show only ERRORs, default: INFO logging
 ```
