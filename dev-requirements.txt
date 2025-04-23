@@ -3,3 +3,5 @@ orjson
 pylint
 pandas
 perftester
+psutil
+matplotlib

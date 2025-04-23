@@ -247,7 +247,6 @@ def filter_and_process_data(data: List[Dict], ecu_name: List[str] = None) -> Lis
         List of filtered and processed data entries with numeric values.
     """
     filtered_data = []
-    total_entries = len(data)
     skipped_entries = 0
 
     # Convert ecu_name to lowercase for case-insensitive matching if provided
@@ -558,11 +557,6 @@ def main():
         log_setup('info')
 
     try:
-        # Normal mode (not watching)
-        # If the file is a CSV file, reject it
-        if args.file.lower().endswith('.csv'):
-            logging.error("CSV files are not supported for reading.")
-            return
             
         # Read the JSON file
         data = read_file(args.file)

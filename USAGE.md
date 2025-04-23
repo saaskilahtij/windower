@@ -9,22 +9,22 @@ Windower is a tool designed to create time-based windows from preprocessed JSON 
 3. Calculating statistics for each window (min, max, mean, standard deviation)
 4. Outputting results in CSV or JSON format
 
-## Installation
+It comes along with unit testing and benchmarking utilities `test_windower.py` (unit tests), `perftester_windower.py` (benchmarking), and `visualize_benchmarks.py` (visualizing benchmarks).
 
-### Prerequisites
-
-- Python 3.6+
-- Required packages:
-  - pandas
-  - orjson
-
-### Dependencies Installation
+## Dependency Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
+Or if needing to run or develop tests and benchmarks:
+```bash
+pip install -r dev-requirements.txt
+```
+
 ## Command-Line Arguments
+
+Can be invoked by running `python3 windower.py -h`.
 
 ```
      _     _     _   O             ___        __     _     _     _   ____
@@ -36,52 +36,17 @@ pip install -r requirements.txt
                          windows made quick and easy
 ```
 
-### Required Arguments
-
-- `-f, --file` - Path to the input JSON file containing ECU data
-
-### Output Options
-
-- `-csv, --output-csv` - Path to save the output CSV file
-- `-json, --output-json` - Path to save the output JSON file
-
-### Window Parameters
-
-- `-l, --length` - Window length in seconds (required for processing)
-- `-s, --step` - How many seconds the window moves forward (default: same as window length)
-
-### Filtering
-
-- `-e, --ecu` - Filter data by specific ECU name(s). Can provide multiple names.
-
-### Utility Options
-
-- `-list, --list-ecus` - List all ECU names found in the data file (can only be used with file and logging arguments)
-
-### Logging Options
-
-- `-d, --debug` - Enable detailed DEBUG logging
-- `-q, --quiet` - Show only ERROR level messages
-
-## Basic Usage
-
-### List Available ECUs
+### Examples
 
 To view all ECU names in the data file:
-
 ```bash
 python windower.py -f data.json --list-ecus
 ```
 
-### Process Data with Default Settings
-
-Process data with 1-second windows and save as CSV:
-
+Process data with 1-second window, default 1-second step, and save as CSV:
 ```bash
 python windower.py -f data.json -l 1 -csv output.csv
 ```
-
-### Customize Window Size and Step
 
 Create 5-second windows with 2-second steps:
 
@@ -89,18 +54,13 @@ Create 5-second windows with 2-second steps:
 python windower.py -f data.json -l 5 -s 2 -csv output.csv
 ```
 
-### Filter by ECU
-
 Process only data from specific ECUs:
 
 ```bash
-python windower.py -f data.json -l 1 -e BRAKE ENGINE -csv output.csv
+python windower.py -f data.json -l 1 -e BRAKE GAS_PEDAL -csv output.csv
 ```
 
-### Multiple Output Formats
-
 Generate both CSV and JSON outputs:
-
 ```bash
 python windower.py -f data.json -l 1 -csv output.csv -json output.json
 ```
@@ -129,6 +89,8 @@ Notes:
 - The `timestamp` field must be a valid timestamp
 - The `data` field must be parseable as JSON and contain numeric values
 
+If the schema changes, the tool will break.
+
 ### Output Format
 
 #### CSV Output
@@ -147,38 +109,63 @@ The CSV output file contains the following columns:
 
 The JSON output has the same structure as the CSV output, formatted as an array of objects.
 
-## Error Handling
+# Pytest - Usage Guide
 
-Windower includes extensive error handling:
-- Invalid JSON files will be reported
-- Missing files will be detected
-- Invalid timestamps are filtered out
-- Empty data or windows will be reported
-- Invalid command-line arguments will display helpful error messages
+Pytest is easy to use. Just run: `pytest`.
 
-## Examples with Expected Output
+# Performance Testing Tools - Usage Guide
 
-### Example 1: List ECUs in data file
+## Overview
 
+The Windower performance testing tool is designed to measure and analyze the performance characteristics (execution time and memory usage) of the `filter_and_process_data` and `create_windows` functions across different data sizes and configurations. 
+
+The performance testing tool consists of two main scripts:
+1. **perftester_windower.py**: Measures execution time and memory usage of windower functions
+2. **visualize_benchmarks.py**: Creates visualizations and tables from benchmark results
+
+Key metrics to produce:
+- **Time Stats**: Execution time in seconds (min, max, mean, median)
+- **Memory Stats**: Memory usage in MB (mean, max, peak)
+- **Windows Generated**: Number of windows created from the data
+
+## Command-Line Arguments perftester_windower.py
+
+Can be invoked by running:
 ```bash
-python windower.py -f can_dump.json --list-ecus
+python3 perftester_windower.py -h
+or
+python3 visualize_benchmarks.py -h
 ```
 
-Output:
-```
-ECU names found in the data: BRAKE, ENGINE, TRANSMISSION, SPEED
-```
-
-### Example 2: Create 2-second windows with 1-second step
-
+### Examples
+Benchmark sets of 1000, 10000, and 1000000 with three iterations, creating windows lengths of 1 second, and save the output to results.json:
 ```bash
-python windower.py -f can_dump.json -l 2 -s 1 -csv output.csv
+python3 perftester_windower.py -s 1000 10000 100000 -i 3 -w 1.0 -o results.json
 ```
 
-Output:
-```
-2023-06-12 14:30:45 - INFO - Reading JSON file: can_dump.json
-2023-06-12 14:30:46 - INFO - CSV file saved: output.csv
+Similar, but with 10000 entries, five iterations and tweaked window and step lengths while saving the output to custom_results.json:
+```bash
+python3 perftester_windower.py -s 10000 -i 5 -w 2.0 -t 0.5 -o custom_results.json
 ```
 
-The CSV file will contain statistics for each window, with columns like `window_index`, `window_start`, `window_end`, `min_BRAKE_AMOUNT`, `max_BRAKE_AMOUNT`, `mean_BRAKE_AMOUNT`, `std_BRAKE_AMOUNT`.
+If you then wish to visualize the results in results.json case:
+```bash
+python3 visualize_benchmarks.py -f results.json
+```
+
+To save the output images to a custom folder:
+```bash
+python3 visualize_benchmarks.py -f results.json -o my_visualization_folder
+```
+
+## Output
+
+`perftester_windower-py` produces text output, and it can save JSON output if specified with `-o` flag.
+
+`visualize_benchmarks.py` produces three visualization files:
+1. `time_comparison.png`: Bar chart comparing execution times
+The time comparison chart shows execution time (in seconds, milliseconds, or microseconds) for each function across different data sizes. Vertical labels on each bar show the exact time values.
+2. `memory_comparison.png`: Bar chart comparing memory usage
+The memory chart shows memory usage (in MB) for each function across different data sizes. Vertical labels on each bar show the exact memory values.
+3. `scaling.png`: Log-log plot showing scaling behavior
+The scaling plot uses logarithmic scales on both axes to reveal how execution time and memory usage scale with data size. This helps identify if performance follows expected complexity (e.g., O(n), O(n log n), O(n²))

@@ -1,3 +1,5 @@
+## A tool to create windows
+
 ```
      _     _     _   O             ___        __     _     _     _   ____
      \    | \    |  /|\  __    _  | ___\    /    \    \    | \    |  |   \
@@ -22,3 +24,8 @@ options:
   -d, --debug           Enable DEBUG logging, default: INFO logging
   -q, --quiet           Show only ERRORs, default: INFO logging
 ```
+
+## Testing & Benchmarking
+
+The tool comes along with unit tests provided by pytest, and with perftester benchmarking library.
+
