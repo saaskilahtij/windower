@@ -1,0 +1,8 @@
+
+Buffered writing is not workin
+Check them on these funcs
+            if args.output_csv:
+                dict_to_csv(data, args.length, args.output_csv, args.step, ecu_filter, args.buffered, args.buffer_size)
+            if args.output_json:
+                dict_to_json(data, args.output_json, args.length, args.step, ecu_filter, args.buffered, args.buffer_size)
+

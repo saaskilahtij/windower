@@ -92,7 +92,7 @@ def read_file(file_name: str, buffered: bool = False, buffer_size: int = 1000) -
             logging.info("Using buffered reading with buffer size: %d", buffer_size)
             
             # Open the file for reading
-            with open(file_name, "r", encoding="utf-8") as file:
+            with open(file_name, "r", encoding="utf-8", buffering=1) as file:
                 # Read the entire file content
                 file_content = file.read()
                 
@@ -116,7 +116,7 @@ def read_file(file_name: str, buffered: bool = False, buffer_size: int = 1000) -
                 return all_cleaned_data
         else:
             # Non-buffered reading (original behavior)
-            with open(file_name, "r", encoding="utf-8") as file:
+            with open(file_name, "r", encoding="utf-8", buffering=1) as file:
                 data = orjson.loads(file.read())
                 logging.debug("%s read successfully!", file_name)
                 logging.debug("Cleaning data...")
@@ -487,7 +487,7 @@ def dict_to_csv(
             logging.info("Using buffered writing with buffer size: %d", buffer_size)
             
             # Open file in write mode
-            with open(csv_filename, "w", encoding="utf-8-sig") as f:
+            with open(csv_filename, "w", encoding="utf-8-sig", buffering=1) as f:
                 # Write header
                 header = ";".join(results_df.columns) + "\n"
                 f.write(header)
@@ -573,7 +573,7 @@ def dict_to_json(
             logging.info("Using buffered writing with buffer size: %d", buffer_size)
             
             # Open file in write mode
-            with open(json_filename, "w", encoding="utf-8") as f:
+            with open(json_filename, "w", encoding="utf-8", buffering=1) as f:
                 # Write opening bracket
                 f.write("[\n")
                 
@@ -605,7 +605,7 @@ def dict_to_json(
             logging.info("JSON file saved with buffered writing: %s", json_filename)
         else:
             # Non-buffered writing (original behavior)
-            with open(json_filename, "w", encoding="utf-8") as f:
+            with open(json_filename, "w", encoding="utf-8", buffering=1) as f:
                 logging.debug("Saving to %s...", json_filename)
                 f.write(orjson.dumps(data, option=orjson.OPT_INDENT_2 | orjson.OPT_NON_STR_KEYS).decode("utf-8"))
             logging.info("%s saved successfully", json_filename)
@@ -701,7 +701,7 @@ def watch_file(
                 logging.debug("File has been modified, reading new data")
                 
                 # Read the file from the last position
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, "r", encoding="utf-8", buffering=1) as f:
                     f.seek(last_position)
                     new_data = f.read()
                     last_position = f.tell()
@@ -832,50 +832,6 @@ def process_and_save_data(
     else:
         logging.warning("No valid entries to process after filtering")
 
-def read_csv_file(file_name: str, buffered: bool = False, buffer_size: int = 1000) -> Optional[pd.DataFrame]:
-    """
-    This function reads a CSV file and converts it into a pandas DataFrame.
-    
-    Args:
-        file_name (str): Path to the CSV file.
-        buffered (bool): Whether to use buffered reading (default: False).
-        buffer_size (int): Number of rows to buffer before processing (default: 1000).
-        
-    Returns:
-        Optional[pd.DataFrame]: Parsed CSV data as a pandas DataFrame or None if an error occurs.
-    """
-    logging.info("Reading CSV file: %s", file_name)
-    try:
-        if buffered:
-            logging.info("Using buffered reading with buffer size: %d", buffer_size)
-            
-            # Read the CSV file in chunks
-            chunks = []
-            for chunk in pd.read_csv(file_name, sep=";", chunksize=buffer_size):
-                chunks.append(chunk)
-                logging.debug("Read %d rows from %s", len(chunk), file_name)
-            
-            # Combine all chunks into a single DataFrame
-            if chunks:
-                result_df = pd.concat(chunks, ignore_index=True)
-                logging.debug("%s read successfully with buffered reading!", file_name)
-                return result_df
-            else:
-                logging.warning("No data found in CSV file: %s", file_name)
-                return pd.DataFrame()
-        else:
-            # Non-buffered reading (original behavior)
-            result_df = pd.read_csv(file_name, sep=";")
-            logging.debug("%s read successfully!", file_name)
-            return result_df
-    except FileNotFoundError:
-        logging.error("Error: The file '%s' was not found.", file_name)
-    except pd.errors.EmptyDataError:
-        logging.error("Error: The file '%s' is empty.", file_name)
-    except Exception as e:
-        logging.error("Unexpected error reading CSV file '%s': %s", file_name, e)
-    return None
-
 def main():
     """
         Entrypoint
@@ -935,20 +891,16 @@ def main():
             return
         
         # Normal mode (not watching)
-        # Check if the file is a CSV file
+        # If the file is a CSV file, reject it
         if args.file.lower().endswith('.csv'):
-            data = read_csv_file(args.file, args.buffered, args.buffer_size)
-            if data is None:
-                logging.error("Failed to read or parse the input CSV file.")
-                return
-            # Convert DataFrame to list of dictionaries
-            data = data.to_dict('records')
-        else:
-            # Assume it's a JSON file
-            data = read_file(args.file, args.buffered, args.buffer_size)
-            if data is None:
-                logging.error("Failed to read or parse the input file.")
-                return
+            logging.error("CSV files are not supported for reading.")
+            return
+            
+        # Read the JSON file
+        data = read_file(args.file, args.buffered, args.buffer_size)
+        if data is None:
+            logging.error("Failed to read or parse the input file.")
+            return
 
         ecu_filter = args.ecu
         if ecu_filter:

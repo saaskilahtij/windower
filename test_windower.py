@@ -195,7 +195,7 @@ class TestWindower(unittest.TestCase):
 
         windower.dict_to_json(test_data, json_filename)
 
-        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8")
+        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8", buffering=1)
 
         handle = mock_open_function()
         handle.write.assert_called_once()
@@ -222,7 +222,7 @@ class TestWindower(unittest.TestCase):
         windower.dict_to_json(test_data, json_filename, buffered=True, buffer_size=1000)
         
         # Verify file was opened correctly
-        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8")
+        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8", buffering=1)
         
         # Get the file handle
         handle = mock_open_function()
@@ -276,7 +276,7 @@ class TestWindower(unittest.TestCase):
         mock_create_windows.assert_called_once()
         
         # Verify that the file was opened correctly
-        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8")
+        mock_open_function.assert_called_once_with(json_filename, "w", encoding="utf-8", buffering=1)
         
         # Verify that write was called
         handle = mock_open_function()
@@ -338,7 +338,7 @@ class TestWindower(unittest.TestCase):
         windower.dict_to_csv(test_data, window_length, csv_filename, buffered=True, buffer_size=1000)
         
         # Verify file was opened correctly
-        mock_open_function.assert_called_once_with(csv_filename, "w", encoding="utf-8-sig")
+        mock_open_function.assert_called_once_with(csv_filename, "w", encoding="utf-8-sig", buffering=1)
         
         # Get the file handle
         handle = mock_open_function()
