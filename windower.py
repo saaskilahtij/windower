@@ -8,7 +8,7 @@ Description: This tool was designed to create windows from preprocessed JSON dat
 import sys
 import argparse
 import logging
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Optional, Any
 import pandas as pd
 import orjson
 import time
