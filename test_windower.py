@@ -4,9 +4,15 @@ Authors: Johan Sääskilahti, Atte Rajavaara, Minna Repo, Topias Hämäläinen
 Description: This file contains the windower unit tests
 """
 
+from datetime import datetime
+import math
+import random
 import unittest
+from unittest import mock
 from unittest.mock import patch, mock_open
 import argparse
+import sys
+import logging
 import orjson
 import pandas as pd
 import windower
@@ -68,6 +74,22 @@ class TestWindower(unittest.TestCase):
 
         result = windower.parse_ecu_names(test_data)
         self.assertEqual(sorted(result), sorted(expected_result))
+
+    def test_list_ecus_valid(self):
+        """Test list_ecus valid (no other args than -f)"""
+        test_args = ['windower.py', '-f', 'test.json', '--list-ecus']
+        with patch.object(sys, 'argv', test_args):
+            parser, args = windower.handle_args()
+            self.assertTrue(args.list_ecus)
+            self.assertEqual(args.file, 'test.json')
+
+    def test_list_ecus_invalid_other_args(self):
+        """Test list_ecus with another args, should print message"""
+        test_args = ['windower.py', '-f', 'test.json', '--list-ecus', '--length', '5']
+        with patch.object(sys, 'argv', test_args):
+            with self.assertRaises(SystemExit) as cm:
+                windower.handle_args()
+            self.assertEqual(cm.exception.code, 2)
 
     def test_clean_data_removes_unknowns(self):
         """
@@ -228,6 +250,176 @@ class TestWindower(unittest.TestCase):
 
         args, _ = mock_to_csv.call_args
         self.assertEqual(args[0], csv_filename)
+class TestLogger(unittest.TestCase):
+    """
+    Test logger and how it should work with no logger args, -q and -d
+    """
+
+    def setUp(self):
+        logger = logging.getLogger()
+        logger.handlers.clear()
+        logger.setLevel(logging.NOTSET)
+
+    def test_default(self):
+        """
+        Test with no logger args
+        """
+        windower.log_setup('')
+        self.assertEqual(logging.getLogger().level, logging.INFO)
+
+    def test_quiet(self):
+        """
+        Test -q (quiet mode)
+        """
+        windower.log_setup('quiet')
+        self.assertEqual(logging.getLogger().level, logging.ERROR)
+
+    def test_debug(self):
+        """
+        Test -d (debug mode)
+        """
+        windower.log_setup('debug')
+        self.assertEqual(logging.getLogger().level, logging.DEBUG)
+
+class TestCreateWindows(unittest.TestCase):
+    """
+    Tests for function create_windows
+    """
+
+    def setUp(self):
+        """
+        Set up base timestamp for consistency
+        """
+        self.base_time = datetime(2025,1,1)
+        random.seed(42)
+
+    @staticmethod
+    def generate_test_data(base_time, count=10, interval_seconds=1):
+        """
+        Generate test data for window tests
+        """
+        data = []
+        base_ts = base_time.timestamp()
+        for i in range(count):
+            ts = base_ts + i * interval_seconds
+            data.append({
+                "timestamp": ts,
+                "value_a": i * 10,
+                "value_b": i * 2,
+            })
+        return data
+
+    def test_empty_data_return(self):
+        """
+        Empty input should return empty dataframe
+        """
+        result = windower.create_windows([], window_length=3)
+        self.assertTrue(result.empty)
+
+    def test_window_sliding(self):
+        """
+        Windows sliding test
+        Windows should move forward correctly based on step provided
+        """
+        data = self.generate_test_data(self.base_time, count=10)
+        result = windower.create_windows(data, window_length=2, step=1)
+
+        prev_start = None
+        for _, row in result.iterrows():
+            if prev_start is not None:
+                self.assertGreaterEqual(row["window_start"], prev_start + 1)
+            prev_start = row["window_start"]
+
+    def test_statistics_are_correct(self):
+        """
+        Test calculated statistics are correct (min,max,mean,std)
+        Tests based on first window
+        """
+        data = self.generate_test_data(self.base_time, count=5, interval_seconds=1)
+        window_length = 3
+        result = windower.create_windows(data, window_length)
+
+        window_start = data[0]["timestamp"]
+        window_end = window_start + window_length
+
+        window1_data = [d for d in data if window_start <= d["timestamp"] < window_end]
+
+        expected_min_a = min(d["value_a"] for d in window1_data)
+        expected_max_a = max(d["value_a"] for d in window1_data)
+        expected_mean_a = sum(d["value_a"] for d in window1_data) / len(window1_data)
+
+        values_a = [d["value_a"] for d in window1_data]
+        n= len(values_a)
+
+        if n>1:
+            mean = sum(values_a) / n
+            variance = sum((x- mean ) ** 2 for x in values_a) / (n-1)
+            expected_std_a = math.sqrt(variance)
+        else:
+            expected_std_a = float("nan")
+
+        expected_min_b = min(d["value_b"] for d in window1_data)
+        expected_max_b = max(d["value_b"] for d in window1_data)
+        expected_mean_b = sum(d["value_b"] for d in window1_data) / len(window1_data)
+
+        values_b = [d["value_b"] for d in window1_data]
+
+        if n>1:
+            mean = sum(values_b) / n
+            variance = sum((x- mean ) ** 2 for x in values_b) / (n-1)
+            expected_std_b = math.sqrt(variance)
+        else:
+            expected_std_b = float("nan")
+
+        row = result.iloc[0]
+        self.assertEqual(row["min_value_a"], expected_min_a)
+        self.assertEqual(row["max_value_a"], expected_max_a)
+        self.assertAlmostEqual(row["mean_value_a"], expected_mean_a, places=5)
+        if math.isnan(expected_std_a):
+            self.assertTrue(math.isnan(row["std_value_a"]))
+        else:
+            self.assertAlmostEqual(row["std_value_a"], expected_std_a, places=5)
+
+        self.assertEqual(row["min_value_b"], expected_min_b)
+        self.assertEqual(row["max_value_b"], expected_max_b)
+        self.assertAlmostEqual(row["mean_value_b"], expected_mean_b, places=5)
+        if math.isnan(expected_std_b):
+            self.assertTrue(math.isnan(row["std_value_b"]))
+        else:
+            self.assertAlmostEqual(row["std_value_b"], expected_std_b, places=5)
+
+class TestReadFile(unittest.TestCase):
+    """
+    Tests for the read_file function
+    """
+
+    @mock.patch("windower.clean_data")
+    @mock.patch("windower.orjson")
+    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data='[{"key": "value"}]')
+    def test_read_file_success(self,mock_open, mock_orjson, mock_clean_data):
+        """
+        Test for successfully reading JSON file and process it
+        """
+
+        mock_orjson.loads.return_value = [{"key": "value"}]
+        mock_clean_data.return_value = [{"key": "value"}]
+
+        result = windower.read_file("readtest.json")
+
+        mock_open.assert_called_once_with("readtest.json", "r", encoding="utf-8", buffering=1)
+        mock_orjson.loads.assert_called_once()
+        mock_clean_data.assert_called_once()
+        self.assertEqual(result, [{"key": "value"}])
+
+    @mock.patch("builtins.open", side_effect=FileNotFoundError)
+    def test_read_file_file_not_found(self,mock_open):
+        """
+        Test for handling FileNotFoundError when reading non-existent JSON file
+        """
+
+        result = windower.read_file("nonexistent.json")
+        mock_open.assert_called_once_with("nonexistent.json", "r", encoding="utf-8", buffering=1)
+        self.assertIsNone(result)
 
 if __name__ == '__main__':
     unittest.main()
