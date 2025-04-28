@@ -25,12 +25,12 @@ class TestWindower(unittest.TestCase):
     Tests:
         - test_ecu_names_flow: Verifies that the main function correctly prints the
           ECU names by mocking the read_file and parse_ecu_names functions.
-        - test_clean_data_removes_unknowns: Verifies that the clean_data function 
+        - test_clean_data_removes_unknowns: Verifies that the clean_data function
           correctly removes entries where the name field is "Unknown".
         - test_filter_and_process_data_with_known_ecu:
           Tests the function by filtering data based on the "BRAKE" ECU name
           and ensuring that only "BRAKE" data entries are processed and returned.
-        - test_filter_and_process_data_invalid_timestamp:  
+        - test_filter_and_process_data_invalid_timestamp:
         - test_main_no_output_format:
     """
     @patch("windower.parse_ecu_names", return_value=["ECU1", "ECU2"])
@@ -38,7 +38,7 @@ class TestWindower(unittest.TestCase):
     def test_ecu_names_flow(self, _mock_read, mock_load):
         """
         Test the flow for extracting and printing ECU names from the JSON data.
-        
+
         This test uses hardcoded test data that matches the schema of real CAN data,
         and verifies that the main function correctly extracts and prints the ECU names.
         """
@@ -53,7 +53,7 @@ class TestWindower(unittest.TestCase):
             {
                 "name": "SPEED",
                 "timestamp": 1717678137.6916034,
-                "id": 180, 
+                "id": 180,
                 "data": "{\"ENCODER\": 1, \"SPEED\": 15.48, \"CHECKSUM\": 207}",
                 "raw": "0x0000000001060ccf"
             }
@@ -93,11 +93,11 @@ class TestWindower(unittest.TestCase):
 
     def test_clean_data_removes_unknowns(self):
         """
-        Test that clean_data removes entries with names containing 'unknown' 
+        Test that clean_data removes entries with names containing 'unknown'
         (case-insensitive).
 
-        This test ensures that the clean_data function correctly filters out 
-        entries where the name field is 'Unknown', 'unknown', or any other 
+        This test ensures that the clean_data function correctly filters out
+        entries where the name field is 'Unknown', 'unknown', or any other
         case-insensitive variation of the word 'unknown'.
         """
         input_data = [
@@ -130,7 +130,7 @@ class TestWindower(unittest.TestCase):
 
     def test_filter_and_process_data_with_known_ecu(self):
         """
-        Tests the functionality of the filter_and_process_data function 
+        Tests the functionality of the filter_and_process_data function
         by filtering the data based on a specific ECU name.
         """
 

@@ -11,11 +11,6 @@ import logging
 from typing import List, Dict, Optional, Any
 import pandas as pd
 import orjson
-import time
-import os
-import signal
-import json
-from datetime import datetime
 
 
 DESC = r"""
@@ -538,7 +533,7 @@ def main():
         Entrypoint
     """
     argparser, args = handle_args()
-    
+
     #-list/--list-ecus can only be used with file and optional logging level (only -f/--file, -list/--list-ecus and log loglevel)
     if args.list_ecus:
         other_args = any([
@@ -547,7 +542,7 @@ def main():
         ])
         if other_args:
             argparser.error("-list / --list-ecus can be only used with file and logging argument, no other arguments")
-    
+
     # Set logging configuration (default info)
     if args.quiet:
         log_setup('quiet')
@@ -557,7 +552,7 @@ def main():
         log_setup('info')
 
     try:
-            
+
         # Read the JSON file
         data = read_file(args.file)
         if data is None:
