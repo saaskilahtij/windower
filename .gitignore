@@ -2,3 +2,5 @@
 data
 *.log
 *.json
+__pycache__/
+*.py[cod]
