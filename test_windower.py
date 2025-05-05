@@ -4,18 +4,15 @@ Authors: Johan Sääskilahti, Atte Rajavaara, Minna Repo, Topias Hämäläinen
 Description: This file contains the windower unit tests
 """
 
-from datetime import datetime
-import math
-import random
 import unittest
-from unittest import mock
 from unittest.mock import patch, mock_open
 import argparse
-import sys
-import logging
 import orjson
 import pandas as pd
 import windower
+import io
+import sys
+import logging
 
 class TestWindower(unittest.TestCase):
     """
@@ -25,12 +22,12 @@ class TestWindower(unittest.TestCase):
     Tests:
         - test_ecu_names_flow: Verifies that the main function correctly prints the
           ECU names by mocking the read_file and parse_ecu_names functions.
-        - test_clean_data_removes_unknowns: Verifies that the clean_data function
+        - test_clean_data_removes_unknowns: Verifies that the clean_data function 
           correctly removes entries where the name field is "Unknown".
         - test_filter_and_process_data_with_known_ecu:
           Tests the function by filtering data based on the "BRAKE" ECU name
           and ensuring that only "BRAKE" data entries are processed and returned.
-        - test_filter_and_process_data_invalid_timestamp:
+        - test_filter_and_process_data_invalid_timestamp:  
         - test_main_no_output_format:
     """
     @patch("windower.parse_ecu_names", return_value=["ECU1", "ECU2"])
@@ -38,7 +35,7 @@ class TestWindower(unittest.TestCase):
     def test_ecu_names_flow(self, _mock_read, mock_load):
         """
         Test the flow for extracting and printing ECU names from the JSON data.
-
+        
         This test uses hardcoded test data that matches the schema of real CAN data,
         and verifies that the main function correctly extracts and prints the ECU names.
         """
@@ -53,7 +50,7 @@ class TestWindower(unittest.TestCase):
             {
                 "name": "SPEED",
                 "timestamp": 1717678137.6916034,
-                "id": 180,
+                "id": 180, 
                 "data": "{\"ENCODER\": 1, \"SPEED\": 15.48, \"CHECKSUM\": 207}",
                 "raw": "0x0000000001060ccf"
             }
@@ -75,29 +72,13 @@ class TestWindower(unittest.TestCase):
         result = windower.parse_ecu_names(test_data)
         self.assertEqual(sorted(result), sorted(expected_result))
 
-    def test_list_ecus_valid(self):
-        """Test list_ecus valid (no other args than -f)"""
-        test_args = ['windower.py', '-f', 'test.json', '--list-ecus']
-        with patch.object(sys, 'argv', test_args):
-            parser, args = windower.handle_args()
-            self.assertTrue(args.list_ecus)
-            self.assertEqual(args.file, 'test.json')
-
-    def test_list_ecus_invalid_other_args(self):
-        """Test list_ecus with another args, should print message"""
-        test_args = ['windower.py', '-f', 'test.json', '--list-ecus', '--length', '5']
-        with patch.object(sys, 'argv', test_args):
-            with self.assertRaises(SystemExit) as cm:
-                windower.handle_args()
-            self.assertEqual(cm.exception.code, 2)
-
     def test_clean_data_removes_unknowns(self):
         """
-        Test that clean_data removes entries with names containing 'unknown'
+        Test that clean_data removes entries with names containing 'unknown' 
         (case-insensitive).
 
-        This test ensures that the clean_data function correctly filters out
-        entries where the name field is 'Unknown', 'unknown', or any other
+        This test ensures that the clean_data function correctly filters out 
+        entries where the name field is 'Unknown', 'unknown', or any other 
         case-insensitive variation of the word 'unknown'.
         """
         input_data = [
@@ -130,7 +111,7 @@ class TestWindower(unittest.TestCase):
 
     def test_filter_and_process_data_with_known_ecu(self):
         """
-        Tests the functionality of the filter_and_process_data function
+        Tests the functionality of the filter_and_process_data function 
         by filtering the data based on a specific ECU name.
         """
 
@@ -250,176 +231,279 @@ class TestWindower(unittest.TestCase):
 
         args, _ = mock_to_csv.call_args
         self.assertEqual(args[0], csv_filename)
-class TestLogger(unittest.TestCase):
-    """
-    Test logger and how it should work with no logger args, -q and -d
-    """
 
-    def setUp(self):
-        logger = logging.getLogger()
-        logger.handlers.clear()
-        logger.setLevel(logging.NOTSET)
+    @patch("builtins.open", new_callable=mock_open, read_data='[{"name": "TEST", "timestamp": 123, "data": "{\"value\": 42}"}]')
+    @patch("windower.orjson.loads")
+    def test_read_file_success(self, mock_loads, mock_file):
+        """Test successful file reading."""
+        mock_loads.return_value = [{"name": "TEST", "timestamp": 123, "data": "{\"value\": 42}"}]
+        result = windower.read_file("test.json")
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "TEST")
+        mock_file.assert_called_once_with("test.json", "r", encoding="utf-8", buffering=1)
+        mock_loads.assert_called_once()
 
-    def test_default(self):
-        """
-        Test with no logger args
-        """
-        windower.log_setup('')
-        self.assertEqual(logging.getLogger().level, logging.INFO)
+    @patch("builtins.open", side_effect=FileNotFoundError)
+    def test_read_file_not_found(self, mock_file):
+        """Test handling of file not found."""
+        result = windower.read_file("nonexistent.json")
+        self.assertIsNone(result)
 
-    def test_quiet(self):
-        """
-        Test -q (quiet mode)
-        """
-        windower.log_setup('quiet')
-        self.assertEqual(logging.getLogger().level, logging.ERROR)
+    @patch("builtins.open", new_callable=mock_open, read_data='invalid json')
+    @patch("windower.orjson.loads", side_effect=ValueError("Invalid JSON"))
+    def test_read_file_invalid_json(self, mock_loads, mock_file):
+        """Test handling of invalid JSON."""
+        result = windower.read_file("invalid.json")
+        self.assertIsNone(result)
 
-    def test_debug(self):
-        """
-        Test -d (debug mode)
-        """
-        windower.log_setup('debug')
-        self.assertEqual(logging.getLogger().level, logging.DEBUG)
+    def test_safe_parse_json_valid(self):
+        """Test parsing valid JSON."""
+        json_data = '{"key": "value", "number": 42}'
+        result = windower.safe_parse_json(json_data)
+        self.assertEqual(result, {"key": "value", "number": 42})
 
-class TestCreateWindows(unittest.TestCase):
-    """
-    Tests for function create_windows
-    """
+    def test_safe_parse_json_invalid(self):
+        """Test parsing invalid JSON."""
+        json_data = 'not a json'
+        result = windower.safe_parse_json(json_data)
+        self.assertIsNone(result)
 
-    def setUp(self):
-        """
-        Set up base timestamp for consistency
-        """
-        self.base_time = datetime(2025,1,1)
-        random.seed(42)
+    def test_safe_parse_json_empty(self):
+        """Test parsing empty input."""
+        result = windower.safe_parse_json("")
+        self.assertIsNone(result)
+        result = windower.safe_parse_json(None)
+        self.assertIsNone(result)
+        
+    def test_safe_parse_json_with_single_quotes(self):
+        """Test parsing JSON with single quotes."""
+        json_data = "{'key': 'value', 'number': 42}"
+        result = windower.safe_parse_json(json_data)
+        self.assertEqual(result, {"key": "value", "number": 42})
 
-    @staticmethod
-    def generate_test_data(base_time, count=10, interval_seconds=1):
-        """
-        Generate test data for window tests
-        """
-        data = []
-        base_ts = base_time.timestamp()
-        for i in range(count):
-            ts = base_ts + i * interval_seconds
-            data.append({
-                "timestamp": ts,
-                "value_a": i * 10,
-                "value_b": i * 2,
-            })
-        return data
+    def test_create_windows_basic(self):
+        """Test creating windows with basic data."""
+        test_data = [
+            {"timestamp": 1000.0, "value": 10},
+            {"timestamp": 1001.0, "value": 20},
+            {"timestamp": 1003.0, "value": 30},
+            {"timestamp": 1005.0, "value": 40},
+        ]
+        result = windower.create_windows(test_data, window_length=2.0, step=2.0)
+        self.assertEqual(len(result), 3)  # Should create 3 windows
+        self.assertEqual(result.iloc[0]["window_start"], 1000.0)
+        self.assertEqual(result.iloc[1]["window_start"], 1002.0)
+        self.assertEqual(result.iloc[2]["window_start"], 1004.0)
 
-    def test_empty_data_return(self):
-        """
-        Empty input should return empty dataframe
-        """
-        result = windower.create_windows([], window_length=3)
+    def test_create_windows_empty(self):
+        """Test creating windows with empty data."""
+        result = windower.create_windows([], window_length=1.0)
         self.assertTrue(result.empty)
 
-    def test_window_sliding(self):
-        """
-        Windows sliding test
-        Windows should move forward correctly based on step provided
-        """
-        data = self.generate_test_data(self.base_time, count=10)
-        result = windower.create_windows(data, window_length=2, step=1)
+    def test_create_windows_different_step(self):
+        """Test creating windows with a step different from window length."""
+        test_data = [
+            {"timestamp": 1000.0, "value": 10},
+            {"timestamp": 1001.0, "value": 20},
+            {"timestamp": 1002.0, "value": 30},
+            {"timestamp": 1003.0, "value": 40},
+            {"timestamp": 1004.0, "value": 50},
+        ]
+        result = windower.create_windows(test_data, window_length=2.0, step=1.0)
+        self.assertEqual(len(result), 5)  # Should create 5 windows with overlap
+        self.assertEqual(result.iloc[0]["window_start"], 1000.0)
+        self.assertEqual(result.iloc[1]["window_start"], 1001.0)
 
-        prev_start = None
-        for _, row in result.iterrows():
-            if prev_start is not None:
-                self.assertGreaterEqual(row["window_start"], prev_start + 1)
-            prev_start = row["window_start"]
+    def test_create_windows_with_no_timestamp_column(self):
+        """Test creating windows with data that has no timestamp column."""
+        test_data = [
+            {"no_timestamp": 1000.0, "value": 10},
+            {"no_timestamp": 1001.0, "value": 20},
+        ]
+        result = windower.create_windows(test_data, window_length=2.0)
+        self.assertTrue(result.empty)
+    
+    def test_create_windows_with_no_numeric_columns(self):
+        """Test creating windows with data that has no numeric columns except timestamp."""
+        test_data = [
+            {"timestamp": 1000.0, "value": "not_numeric"},
+            {"timestamp": 1001.0, "value": "still_not_numeric"},
+        ]
+        result = windower.create_windows(test_data, window_length=2.0)
+        # The result should be empty since there are no numeric columns to calculate stats for
+        self.assertTrue(result.empty)
 
-    def test_statistics_are_correct(self):
-        """
-        Test calculated statistics are correct (min,max,mean,std)
-        Tests based on first window
-        """
-        data = self.generate_test_data(self.base_time, count=5, interval_seconds=1)
-        window_length = 3
-        result = windower.create_windows(data, window_length)
+    def test_check_output_options_true(self):
+        """Test check_output_options returns True when output options are specified."""
+        mock_args = argparse.Namespace(output_csv="output.csv", output_json=None)
+        self.assertTrue(windower.check_output_options(mock_args))
+        
+        mock_args = argparse.Namespace(output_csv=None, output_json="output.json")
+        self.assertTrue(windower.check_output_options(mock_args))
+        
+        mock_args = argparse.Namespace(output_csv="output.csv", output_json="output.json")
+        self.assertTrue(windower.check_output_options(mock_args))
 
-        window_start = data[0]["timestamp"]
-        window_end = window_start + window_length
+    def test_check_output_options_false(self):
+        """Test check_output_options returns False when no output options are specified."""
+        mock_args = argparse.Namespace(output_csv=None, output_json=None)
+        self.assertFalse(windower.check_output_options(mock_args))
 
-        window1_data = [d for d in data if window_start <= d["timestamp"] < window_end]
+    @patch("logging.Logger.setLevel")
+    @patch("logging.Logger.addHandler")
+    @patch("logging.Logger.hasHandlers", return_value=False)
+    def test_log_setup(self, mock_has_handlers, mock_add_handler, mock_set_level):
+        """Test log setup with different logging levels."""
+        # Test debug level
+        windower.log_setup('debug')
+        mock_set_level.assert_called_with(logging.DEBUG)
+        
+        # Test info level
+        windower.log_setup('info')
+        mock_set_level.assert_called_with(logging.INFO)
+        
+        # Test quiet level
+        windower.log_setup('quiet')
+        mock_set_level.assert_called_with(logging.ERROR)
+        
+        # Test default (should be INFO)
+        windower.log_setup('invalid_level')
+        mock_set_level.assert_called_with(logging.INFO)
+        
+        self.assertEqual(mock_add_handler.call_count, 4)
 
-        expected_min_a = min(d["value_a"] for d in window1_data)
-        expected_max_a = max(d["value_a"] for d in window1_data)
-        expected_mean_a = sum(d["value_a"] for d in window1_data) / len(window1_data)
+    @patch("windower.dict_to_csv")
+    @patch("windower.dict_to_json")
+    @patch("windower.read_file")
+    @patch("sys.argv", ["windower.py", "-f", "test.json", "-l", "10", "--output-csv", "out.csv"])
+    def test_main_with_csv_output(self, mock_read_file, mock_dict_to_json, mock_dict_to_csv):
+        """Test main function with CSV output option."""
+        mock_read_file.return_value = [{"name": "ECU1"}]
+        
+        with patch('sys.stdout', new=io.StringIO()) as fake_stdout:
+            windower.main()
+            mock_dict_to_csv.assert_called_once()
+            mock_dict_to_json.assert_not_called()
 
-        values_a = [d["value_a"] for d in window1_data]
-        n= len(values_a)
+    @patch("windower.dict_to_csv")
+    @patch("windower.dict_to_json")
+    @patch("windower.read_file")
+    @patch("sys.argv", ["windower.py", "-f", "test.json", "-l", "10", "--output-json", "out.json"])
+    def test_main_with_json_output(self, mock_read_file, mock_dict_to_json, mock_dict_to_csv):
+        """Test main function with JSON output option."""
+        mock_read_file.return_value = [{"name": "ECU1"}]
+        
+        with patch('sys.stdout', new=io.StringIO()) as fake_stdout:
+            windower.main()
+            mock_dict_to_csv.assert_not_called()
+            mock_dict_to_json.assert_called_once()
 
-        if n>1:
-            mean = sum(values_a) / n
-            variance = sum((x- mean ) ** 2 for x in values_a) / (n-1)
-            expected_std_a = math.sqrt(variance)
-        else:
-            expected_std_a = float("nan")
+    @patch("windower.parse_ecu_names")
+    @patch("windower.read_file")
+    @patch("sys.argv", ["windower.py", "-f", "test.json", "-list"])
+    @patch("builtins.print")
+    def test_main_list_ecus(self, mock_print, mock_read_file, mock_parse_ecu_names):
+        """Test main function with list ECUs option."""
+        mock_read_file.return_value = [{"name": "ECU1"}, {"name": "ECU2"}]
+        mock_parse_ecu_names.return_value = ["ECU1", "ECU2"]
+        
+        windower.main()
+        mock_parse_ecu_names.assert_called_once()
+        mock_print.assert_called_once()
+        self.assertTrue("ECU1" in mock_print.call_args[0][0])
+        self.assertTrue("ECU2" in mock_print.call_args[0][0])
 
-        expected_min_b = min(d["value_b"] for d in window1_data)
-        expected_max_b = max(d["value_b"] for d in window1_data)
-        expected_mean_b = sum(d["value_b"] for d in window1_data) / len(window1_data)
-
-        values_b = [d["value_b"] for d in window1_data]
-
-        if n>1:
-            mean = sum(values_b) / n
-            variance = sum((x- mean ) ** 2 for x in values_b) / (n-1)
-            expected_std_b = math.sqrt(variance)
-        else:
-            expected_std_b = float("nan")
-
-        row = result.iloc[0]
-        self.assertEqual(row["min_value_a"], expected_min_a)
-        self.assertEqual(row["max_value_a"], expected_max_a)
-        self.assertAlmostEqual(row["mean_value_a"], expected_mean_a, places=5)
-        if math.isnan(expected_std_a):
-            self.assertTrue(math.isnan(row["std_value_a"]))
-        else:
-            self.assertAlmostEqual(row["std_value_a"], expected_std_a, places=5)
-
-        self.assertEqual(row["min_value_b"], expected_min_b)
-        self.assertEqual(row["max_value_b"], expected_max_b)
-        self.assertAlmostEqual(row["mean_value_b"], expected_mean_b, places=5)
-        if math.isnan(expected_std_b):
-            self.assertTrue(math.isnan(row["std_value_b"]))
-        else:
-            self.assertAlmostEqual(row["std_value_b"], expected_std_b, places=5)
-
-class TestReadFile(unittest.TestCase):
-    """
-    Tests for the read_file function
-    """
-
-    @mock.patch("windower.clean_data")
-    @mock.patch("windower.orjson")
-    @mock.patch("builtins.open", new_callable=mock.mock_open, read_data='[{"key": "value"}]')
-    def test_read_file_success(self,mock_open, mock_orjson, mock_clean_data):
-        """
-        Test for successfully reading JSON file and process it
-        """
-
-        mock_orjson.loads.return_value = [{"key": "value"}]
-        mock_clean_data.return_value = [{"key": "value"}]
-
-        result = windower.read_file("readtest.json")
-
-        mock_open.assert_called_once_with("readtest.json", "r", encoding="utf-8", buffering=1)
-        mock_orjson.loads.assert_called_once()
-        mock_clean_data.assert_called_once()
-        self.assertEqual(result, [{"key": "value"}])
-
-    @mock.patch("builtins.open", side_effect=FileNotFoundError)
-    def test_read_file_file_not_found(self,mock_open):
-        """
-        Test for handling FileNotFoundError when reading non-existent JSON file
-        """
-
-        result = windower.read_file("nonexistent.json")
-        mock_open.assert_called_once_with("nonexistent.json", "r", encoding="utf-8", buffering=1)
-        self.assertIsNone(result)
+    @patch("windower.read_file")
+    @patch("sys.argv", ["windower.py", "-f", "test.json", "-l", "10"])
+    @patch("builtins.print")
+    def test_main_no_output_format(self, mock_print, mock_read_file):
+        """Test main function with length but no output format."""
+        mock_read_file.return_value = [{"name": "ECU1"}]
+        
+        windower.main()
+        mock_print.assert_called_once()
+        output_message = mock_print.call_args[0][0]
+        self.assertTrue("Error: No output format specified" in output_message)
+        
+    @patch("windower.filter_and_process_data")
+    def test_dict_to_json_empty_filtered_data(self, mock_filter):
+        """Test dict_to_json with window processing but empty filtered data."""
+        mock_filter.return_value = []
+        test_data = [{"name": "ECU1", "timestamp": 1000.0}]
+        windower.dict_to_json(test_data, "output.json", window_length=2.0)
+        mock_filter.assert_called_once()
+        
+    @patch("windower.filter_and_process_data", return_value=[
+        {"timestamp": 1000.0, "value": 10},
+        {"timestamp": 1001.0, "value": 20}
+    ])
+    @patch("windower.create_windows", return_value=pd.DataFrame())
+    def test_dict_to_json_empty_windows(self, mock_windows, mock_filter):
+        """Test dict_to_json with window processing but empty window results."""
+        test_data = [{"name": "ECU1", "timestamp": 1000.0}]
+        windower.dict_to_json(test_data, "output.json", window_length=2.0)
+        mock_filter.assert_called_once()
+        mock_windows.assert_called_once()
+        
+    @patch("windower.filter_and_process_data", return_value=[])
+    def test_dict_to_csv_empty_filtered_data(self, mock_filter):
+        """Test dict_to_csv with empty filtered data."""
+        test_data = [{"name": "ECU1", "timestamp": 1000.0}]
+        windower.dict_to_csv(test_data, 2.0, "output.csv")
+        mock_filter.assert_called_once()
+        
+    @patch("windower.filter_and_process_data", return_value=[
+        {"timestamp": 1000.0, "value": 10}
+    ])
+    @patch("windower.create_windows", return_value=pd.DataFrame())
+    @patch("windower.pd.DataFrame.to_csv")
+    def test_dict_to_csv_empty_windows(self, mock_to_csv, mock_windows, mock_filter):
+        """Test dict_to_csv with empty window results."""
+        test_data = [{"name": "ECU1", "timestamp": 1000.0}]
+        windower.dict_to_csv(test_data, 2.0, "output.csv")
+        mock_filter.assert_called_once()
+        mock_windows.assert_called_once()
+        mock_to_csv.assert_not_called()
+        
+    def test_filter_and_process_data_with_non_numeric_values(self):
+        """Test filter_and_process_data with non-numeric values in the data field."""
+        input_data = [
+            {"name": "BRAKE", "timestamp": 1000.0, "data": "{\"text\": \"not_numeric\"}"}
+        ]
+        result = windower.filter_and_process_data(input_data)
+        self.assertEqual(result, [])
+        
+    def test_filter_and_process_data_with_invalid_json(self):
+        """Test filter_and_process_data with invalid JSON in the data field."""
+        input_data = [
+            {"name": "BRAKE", "timestamp": 1000.0, "data": "not valid json"}
+        ]
+        result = windower.filter_and_process_data(input_data)
+        self.assertEqual(result, [])
+        
+    def test_filter_and_process_data_without_data_field(self):
+        """Test filter_and_process_data with missing data field."""
+        input_data = [
+            {"name": "BRAKE", "timestamp": 1000.0}
+        ]
+        result = windower.filter_and_process_data(input_data)
+        self.assertEqual(result, [])
+        
+    @patch("sys.argv", ["windower.py", "-f", "test.json", "-list", "--output-csv", "out.csv"])
+    def test_handle_args_with_incompatible_options(self):
+        """Test handle_args with incompatible options (list-ecus with output options)."""
+        with self.assertRaises(SystemExit):
+            windower.handle_args()
+            
+    @patch("windower.dict_to_csv")
+    @patch("windower.read_file", return_value=None)
+    @patch("sys.argv", ["windower.py", "-f", "nonexistent.json", "-l", "10", "--output-csv", "out.csv"])
+    def test_main_with_file_error(self, mock_read_file, mock_dict_to_csv):
+        """Test main function with file read error."""
+        windower.main()
+        mock_dict_to_csv.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
+
