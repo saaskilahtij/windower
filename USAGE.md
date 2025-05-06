@@ -65,6 +65,12 @@ Generate both CSV and JSON outputs:
 python windower.py -f data.json -l 1 -csv output.csv -json output.json
 ```
 
+Debug why a run fails:
+```
+python windower.py -f data.json -l 1 -csv output.csv -json output.json -d
+```
+Note: By default, all logging (even INFO etc.) outputs to STDERR in Unix based systems.
+
 ## Data Processing Details
 
 ### Input Data Format
